@@ -205,7 +205,93 @@ export class World {
     return out;
   }
 
-  /** Line of sight in xz across loaded tiles at a given height. */
+  /**
+   * Approximate light level at a world point from the baked fixtures of nearby cells
+   * (no occlusion), including flicker and dimming. Used to light moving figures.
+   */
+  lightAt(x, y, z, out = [0, 0, 0]) {
+    out[0] = out[1] = out[2] = 0;
+    const seen = new Set();
+    for (const [dx, dz] of [[0, 0], [-6, 0], [6, 0], [0, -6], [0, 6]]) {
+      const cell = this.cellAt(x + dx, z + dz);
+      if (!cell || seen.has(cell)) continue;
+      seen.add(cell);
+      const dim = cell.uniforms.uDim.value;
+      const fl = cell.uniforms.uFlicker.value;
+      for (const l of cell.lights) {
+        const lx = l.x + cell.ox - x;
+        const ly = l.y - y;
+        const lz = l.z + cell.oz - z;
+        const d2 = lx * lx + ly * ly + lz * lz;
+        if (d2 > 64) continue;
+        if (!this.lineOfSight(x, z, l.x + cell.ox, l.z + cell.oz, Math.min(y, 1.2))) continue;
+        const k = (l.power * 0.5 * dim * (l.flicker ? fl : 1)) / (d2 + 1.5);
+        out[0] += l.color[0] * k;
+        out[1] += l.color[1] * k;
+        out[2] += l.color[2] * k;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * A* over walkable tiles across loaded cells. Returns world-space waypoints (tile centres)
+   * or null. Bounded so it never stalls a tick.
+   */
+  findPath(ax, az, bx, bz, maxNodes = 3000) {
+    const T = TILE;
+    const si = Math.floor(ax / T);
+    const sj = Math.floor(az / T);
+    const gi = Math.floor(bx / T);
+    const gj = Math.floor(bz / T);
+    if (!this.isWalkable((gi + 0.5) * T, (gj + 0.5) * T)) return null;
+    const key = (i, j) => i * 100003 + j;
+    const open = new Heap();
+    open.push([si, sj, 0, Math.hypot(gi - si, gj - sj)]);
+    const came = new Map();
+    const g = new Map([[key(si, sj), 0]]);
+    const closed = new Set();
+    let n = 0;
+    const walkCache = new Map();
+    const walk = (i, j) => {
+      const k = key(i, j);
+      let v = walkCache.get(k);
+      if (v === undefined) walkCache.set(k, (v = this.isWalkable((i + 0.5) * T, (j + 0.5) * T)));
+      return v;
+    };
+    while (open.size && n++ < maxNodes) {
+      const [i, j, gc] = open.pop();
+      const ck = key(i, j);
+      if (closed.has(ck)) continue;
+      closed.add(ck);
+      if (i === gi && j === gj) {
+        const pts = [];
+        let k = key(i, j);
+        let cur = [i, j];
+        while (cur) {
+          pts.push({ x: (cur[0] + 0.5) * T, z: (cur[1] + 0.5) * T });
+          cur = came.get(k);
+          if (cur) k = key(cur[0], cur[1]);
+        }
+        return pts.reverse();
+      }
+      for (const [di, dj, c] of [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]]) {
+        const ni = i + di;
+        const nj = j + dj;
+        if (!walk(ni, nj)) continue;
+        if (di && dj && (!walk(i + di, j) || !walk(i, j + dj))) continue;
+        const ng = gc + c;
+        const nk = key(ni, nj);
+        if (g.has(nk) && g.get(nk) <= ng) continue;
+        g.set(nk, ng);
+        came.set(nk, [i, j]);
+        open.push([ni, nj, ng, ng + Math.hypot(gi - ni, gj - nj)]);
+      }
+    }
+    return null;
+  }
+
+  /** Line of sight in xz across loaded tiles at a given height. (See Heap below.) */
   lineOfSight(ax, az, bx, bz, y = 1.5) {
     const dx = bx - ax;
     const dz = bz - az;
@@ -222,5 +308,46 @@ export class World {
   dispose() {
     for (const key of [...this.cells.keys()]) this.unload(key);
     this.worker.terminate();
+  }
+}
+
+/** Minimal binary min-heap on item[3] (f-score) for A*. */
+class Heap {
+  constructor() {
+    this.a = [];
+  }
+  get size() {
+    return this.a.length;
+  }
+  push(x) {
+    const a = this.a;
+    a.push(x);
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (a[p][3] <= a[i][3]) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    const a = this.a;
+    const top = a[0];
+    const last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = i * 2 + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < a.length && a[l][3] < a[m][3]) m = l;
+        if (r < a.length && a[r][3] < a[m][3]) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
   }
 }

@@ -55,8 +55,8 @@ export const CamcorderShader = {
       uv = 0.5 + cc * (1.0 + 0.045 * r2 + uDistort * 0.25 * r2);
 
       // tracking wobble: a band rolling up the frame, plus line jitter
-      float band = smoothstep(0.06, 0.0, abs(fract(uv.y * 0.6 - uTime * 0.11) - 0.5) - 0.44);
-      float track = uTracking * band;
+      float band = smoothstep(0.36, 0.5, abs(fract(uv.y * 0.6 - uTime * 0.11) - 0.5));
+      float track = uTracking * (band + 0.06);
       float lineJit = (hash(vec2(floor(uv.y * uRes.y * 0.5), floor(uTime * 30.0))) - 0.5);
       uv.x += lineJit * (0.0009 + track * 0.02) + sin(uv.y * 30.0 + uTime * 2.0) * 0.0006;
 
@@ -109,7 +109,11 @@ export const CamcorderShader = {
       col *= mix(0.42, 1.0, vig);
 
       // tracking band: noisy white streaks
-      col += track * step(0.82, hash(vec2(floor(uv.y * uRes.y * 0.25), floor(uTime * 24.0)))) * 0.35;
+      float row = floor(uv.y * uRes.y * 0.25);
+      float fr = floor(uTime * 24.0);
+      float seg = hash(vec2(floor(uv.x * 26.0 + hash(vec2(row, fr)) * 26.0), row + fr * 3.1));
+      float spark = hash(gl_FragCoord.xy + fr);
+      col += track * step(0.88, hash(vec2(row, fr))) * step(0.45, seg) * (0.12 + 0.3 * spark);
 
       // out-of-frame black
       if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.0);

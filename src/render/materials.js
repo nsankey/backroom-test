@@ -190,8 +190,11 @@ function injectBake(mat, shared, glow, cell = null) {
     if (glow) {
       shader.fragmentShader = shader.fragmentShader.replace(
         'vec4 diffuseColor = vec4( diffuse, opacity );',
-        'vec4 diffuseColor = vec4( diffuse * vBake, opacity );',
+        // a browned-out tube fades faster than the light it throws, and warms as it starves
+        'vec4 diffuseColor = vec4( diffuse * vBake * uDimG * vec3(1.0, 0.8 + 0.2 * uDimG, 0.55 + 0.45 * uDimG), opacity );',
       );
+      shader.fragmentShader = shader.fragmentShader.replace('uniform float uTime;', 'uniform float uTime;\nuniform float uDimG;');
+      shader.uniforms.uDimG = uniforms.uDim;
       if (mat.userData.animate === 'static') {
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <map_fragment>',

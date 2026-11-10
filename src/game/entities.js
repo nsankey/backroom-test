@@ -1,0 +1,151 @@
+// Entity system: runs hunters and residents on the shared tick, dims the lights around
+// hunters, and keeps their views (meshes, loops) in sync each frame.
+
+import { HUNTERS, RESIDENTS, ENTITIES } from '../entities/index.js';
+import { CELL } from '../world/constants.js';
+
+let nextId = 1;
+
+export class EntitySystem {
+  constructor(game) {
+    this.game = game;
+    this.states = [];
+    this.views = new Map();
+    this.spawnedCells = new Set();
+    this.light = [0, 0, 0];
+    this.lightTick = new Map();
+  }
+
+  ctx() {
+    const g = this.game;
+    return {
+      world: g.world,
+      player: g.player,
+      seed: g.worldSeed,
+      tick: g.tick,
+      events: this.events || [],
+      checkingOut: !!g.checkingOut,
+      checkOut: (why) => g.checkOut(why),
+      onChase: () => g.audio.play('sting', null, { wet: 0.2 }),
+      findOpenSpot: (cell, p) => g.findOpenSpot(cell, p),
+    };
+  }
+
+  tick(game, actions, events) {
+    this.events = events;
+    const ctx = this.ctx();
+    // hunters arrive on a schedule
+    for (const h of HUNTERS) {
+      if (this.states.some((s) => s.type === h.id)) continue;
+      if (game.debugNoHunters) continue;
+      if (h.schedule(game.worldSeed, game.tick) || game.forceHunter === h.id) {
+        game.forceHunter = null;
+        const s = h.spawn(ctx);
+        if (s) this.add(s);
+      }
+    }
+    for (const s of this.states) ENTITIES[s.type].tick(s, ctx);
+    for (const s of this.states.filter((x) => x.done)) this.remove(s);
+
+    // brownout: every loaded cell dims toward the nearest hunter's influence
+    for (const cell of game.world.cells.values()) {
+      let target = 1;
+      for (const s of this.states) {
+        const mod = ENTITIES[s.type];
+        if (!mod.dimAt) continue;
+        const nx = Math.max(cell.ox, Math.min(s.x, cell.ox + CELL));
+        const nz = Math.max(cell.oz, Math.min(s.z, cell.oz + CELL));
+        target = Math.min(target, mod.dimAt(s, Math.hypot(nx - s.x, nz - s.z)));
+      }
+      const u = cell.uniforms.uDim;
+      u.value += (target - u.value) * 0.03;
+    }
+  }
+
+  cellRemoved(game, cell) {
+    for (const s of this.states.filter((x) => x.cellKey === cell.key)) this.remove(s);
+    this.spawnedCells.delete(cell.key);
+  }
+
+  enterCell(game, cell) {
+    this.cellAdded(game, cell);
+  }
+
+  cellAdded(game, cell) {
+    if (!cell || this.spawnedCells.has(cell.key) || !game.player) return;
+    this.spawnedCells.add(cell.key);
+    if (game.save.data.meetings[cell.key]) return;
+    for (const r of RESIDENTS) {
+      if (this.states.some((s) => s.type === r.id)) continue;
+      // also consider the neighbours that just streamed in, so he's there when you arrive
+      if (r.appearsIn(game.worldSeed, cell)) {
+        const s = r.spawn(this.ctx(), cell);
+        if (s) this.add(s);
+      }
+    }
+  }
+
+  add(s) {
+    s.id = nextId++;
+    this.states.push(s);
+  }
+
+  remove(s) {
+    this.states = this.states.filter((x) => x !== s);
+    const v = this.views.get(s.id);
+    if (v) {
+      this.game.scene.remove(v.object);
+      v.dispose();
+      this.views.delete(s.id);
+    }
+    if (s.cellKey && ENTITIES[s.type].role === 'resident' && s.phase !== 'idle') this.game.save.data.meetings[s.cellKey] = true;
+  }
+
+  interactions() {
+    const out = [];
+    for (const s of this.states) {
+      const mod = ENTITIES[s.type];
+      if (mod.interactions) out.push(...mod.interactions(s));
+    }
+    return out;
+  }
+
+  onInteract(game, near) {
+    const s = near.it.entity;
+    if (!s) return false;
+    ENTITIES[s.type].interact(s, game.moments.ctx(null, { x: s.x, y: 1.5, z: s.z }));
+    return true;
+  }
+
+  frame(game, dt, alpha) {
+    const t = game.time;
+    let nearest = Infinity;
+    for (const s of this.states) {
+      const mod = ENTITIES[s.type];
+      let v = this.views.get(s.id);
+      if (!v) {
+        v = mod.view(game);
+        this.views.set(s.id, v);
+        game.scene.add(v.object);
+      }
+      // sample environment light at ~10 Hz
+      const last = this.lightTick.get(s.id) || -1;
+      if (game.tick - last >= 6 || !v.light) {
+        v.light = [...game.world.lightAt(s.x, 1.2, s.z, this.light)];
+        this.lightTick.set(s.id, game.tick);
+      }
+      v.update(s, alpha, v.light, t);
+      if (mod.role === 'hunter') nearest = Math.min(nearest, Math.hypot(s.x - game.player.x, s.z - game.player.z));
+    }
+    // the tape warps as a hunter closes in
+    const k = nearest === Infinity ? 0 : Math.max(0, Math.min(1, (16 - nearest) / 13));
+    const u = game.cam.uniforms;
+    u.uTracking.value += (k * 0.9 - u.uTracking.value) * Math.min(1, dt * 3);
+    u.uDistort.value += (k * k * 0.6 - u.uDistort.value) * Math.min(1, dt * 3);
+  }
+
+  clear() {
+    for (const s of [...this.states]) this.remove(s);
+    this.spawnedCells.clear();
+  }
+}

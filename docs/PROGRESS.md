@@ -6,11 +6,11 @@ Phase 1 of docs/PLAN.md, following docs/PHASE1_PROMPT.md. Re-read before each st
 
 | Step | State |
 | --- | --- |
-| 0. Setup (git, repo, ORIGIN, STYLE, test render) | done locally; GitHub repo waits on `gh auth login` |
+| 0. Setup (git, repo, ORIGIN, STYLE, test render) | done: github.com/nsankey/backroom-test |
 | 1. Engine and feel | done (see below) |
 | 2. Room format and generator | done: 5 places, determinism check passes |
-| 3. Entities | next |
-| 4. Player kit | - |
+| 3. Entities | done: moments API, Night Porter (hunter), Waiting Guest (resident) |
+| 4. Player kit | next |
 | 5. Lore | - |
 | 6. Deploy | - |
 | 7. Fill out to 8 / 2 / 2 | - |
@@ -24,8 +24,11 @@ npm run dev
 
 Open http://localhost:5173. Useful URL flags: `?debug` (fps + cell readout), `?seed=N`,
 `?fresh` (ignore the save), `?kind=<id>` (force the starting cell's kind), `?autostart`.
-In the console, `__game.debugView(x, z, yaw, pitch)` renders one frame from a spot and
-`__game.benchmark(60)` returns GPU-synced ms per frame.
+In the console, `__game.debugView(x, z, yaw, pitch)` renders one frame from a spot (and freezes
+it in an overlay), `await __game.debugSave('name')` writes that frame to `shots/name.jpg` through
+a dev-server endpoint (a hidden browser pane can present stale frames, so trust the file), and
+`__game.benchmark(60)` returns GPU-synced ms per frame. `__game.forceHunter = 'porter'` brings a
+hunter on the next tick; `__game.debugNoHunters = true` keeps them away. Note yaw: `-PI/2` faces +x.
 
 ## Architecture (decisions and why)
 
@@ -88,8 +91,33 @@ In the console, `__game.debugView(x, z, yaw, pitch)` renders one frame from a sp
 - Look passes: dimmer sconce/lamp shades, readable blinds, warmer room light, muted vinyl,
   darker stainless.
 
+### Step 3
+- **Moments API** (`src/game/moments.js`): kinds register `moments` that get a small ctx
+  (`at`, `caption`, `sound`, `after`, `use`, `sit`, `discover`, `pick`, `chance`). Timers count sim
+  ticks, so they are deterministic and pause with the game. Interactions (ring the bell, knock,
+  watch the TV, sit on the bed, buy from the vending machine, read the chart) are moments.
+- **Entity contract** (`src/entities/index.js`): a module has `id`, `role` (hunter / resident),
+  `card`, sim functions over plain state (`schedule`, `spawn`, `appearsIn`, `tick`) and a `view`
+  that only reads state. `src/game/entities.js` runs them off the shared tick and seed.
+- **Hunter: The Night Porter.** Scheduled visits (never before 2.5 min, then a 45 % chance per
+  75 s window, from the seed). Telegraphed three ways: the cart's squeaking wheel is audible from
+  far off, every place near him browns out (tubes fade and warm faster than the light they throw),
+  and the tape's tracking band grows as he closes in. He hears footsteps (running 13 m, walking
+  5.5 m, crouching 1.4 m) and sees you in a cone (8 m, 15 m with the flashlight on). Avoidable by
+  listening, crouching, killing the flashlight and breaking line of sight. If he reaches you, you
+  are "checked out": fade to black, wake in another place, a logbook line. Nothing gory.
+- **Resident: The Waiting Guest.** Sits in the lobby (sometimes elsewhere) with a suitcase, says a
+  few lines when spoken to, gives a hint, then is gone the next time you look away.
+- Pathfinding: A* over walkable tiles with a binary heap and a walk cache; spawn tries at most five
+  path checks (the earlier version hung the page).
+- Bugs fixed on the way: player position exploded when the current cell unloaded during a
+  check-out (move() now refuses to resolve against unloaded space); porter wandered off after an
+  unreachable random target; the tracking band covered the whole frame (inverted smoothstep).
+- Look passes on the porter: faceless head tipped forward, white collar, brass buttons, arms on a
+  push bar, tarnished cart with a skirted cloth and cloche; tracking streaks broken into sparks.
+
 ## Known issues
 - Pointer lock is unavailable in the automation browser; screenshots use `debugView`.
 
 ## Next
-- Step 2: room kinds (guest corridor, guest rooms, ice & vending, sleep lab) and a determinism check.
+- Step 4: player kit (map, logbook, discoveries screen, saves with export/import code).

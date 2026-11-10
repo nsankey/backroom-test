@@ -82,7 +82,9 @@ export default {
     plan.troffers(1.5, 1.5, 14.5, 14.5, { spacing: 2.6, rng, flickerChance: 0.12, skipChance: 0.08, power: 1.05 });
     placeLore(plan);
     plan.point('spawn', 8, 11.5, { yaw: Math.PI });
-    plan.point('resident', 8, 9.4);
+    // where a guest would stand waiting at the desk, facing it
+    const wait = wallPoint(deskWall, deskAt - 0.5, 3.0);
+    plan.point('resident', wait.x, wait.z, { yaw: wait.rot + Math.PI });
     return plan;
   },
 

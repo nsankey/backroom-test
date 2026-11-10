@@ -83,6 +83,8 @@ export function stepPlayer(p, a, world, dt, events) {
 
 function move(p, world, dx, dz) {
   // sub-step so fast moves never tunnel through thin walls
+  // standing in space that isn't loaded (mid-teleport): don't move or resolve against it
+  if (!world.tileAt(p.x, p.z)) return;
   const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.12));
   for (let s = 0; s < steps; s++) {
     p.x += dx / steps;

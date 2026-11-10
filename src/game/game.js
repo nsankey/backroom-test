@@ -20,6 +20,8 @@ import { createPlayer, applyLook, stepPlayer } from './player.js';
 import { flickerLevel } from './flicker.js';
 import { Moments } from './moments.js';
 import { Ambience } from './ambience.js';
+import { EntitySystem } from './entities.js';
+import { hashFloat } from '../core/rng.js';
 import { TICK, TICK_HZ } from './constants.js';
 
 export class Game {
@@ -61,6 +63,16 @@ export class Game {
     this.audio = new AudioEngine();
     this.moments = new Moments(this);
     this.listeners.add(new Ambience(this));
+    this.entities = new EntitySystem(this);
+    this.listeners.add(this.entities);
+    this.world.onCellAdded = (cell) => {
+      for (const sys of this.listeners) sys.cellAdded?.(this, cell);
+    };
+    this.world.onCellRemoved = (cell) => {
+      for (const sys of this.listeners) sys.cellRemoved?.(this, cell);
+    };
+    this.checkingOut = null;
+    this.fade = 1;
 
     // post: render -> bloom -> tonemap/sRGB -> camcorder
     const composer = (this.composer = new EffectComposer(renderer));
@@ -158,6 +170,7 @@ export class Game {
 
   start() {
     this.paused = false;
+    this.debugFreeze(false);
     this.audio.init();
     this.input.clear();
   }
@@ -174,22 +187,25 @@ export class Game {
     const p = this.player;
     const actions = this.input.takeActions();
     if (this.sitting && (actions.moveX || actions.moveZ)) this.standUp();
-    if (this.sitting) {
+    if (this.sitting || this.checkingOut) {
       actions.moveX = 0;
       actions.moveZ = 0;
+      actions.run = false;
     }
+    this.updateCheckOut();
     const events = [];
     this.prev.x = p.x;
     this.prev.z = p.z;
     this.prev.eye = p.eye;
     this.prev.bob = p.bob;
-    stepPlayer(p, actions, this.world, TICK, events);
+    if (!this.checkingOut) stepPlayer(p, actions, this.world, TICK, events);
+    else p.vx = p.vz = 0;
     if (this.sitting) p.eye = 1.1;
 
     // cell streaming & current place
     const cell = this.world.cellAt(p.x, p.z);
     if (cell !== this.currentCell) this.enterCell(cell);
-    if (Math.floor(this.tick) % 15 === 0) this.world.ensureAround(p.x, p.z);
+    if (Math.floor(this.tick) % 15 === 0 && !(this.checkingOut && this.checkingOut.t >= 70)) this.world.ensureAround(p.x, p.z);
 
     // flicker per cell, from the shared tick
     for (const c of this.world.cells.values()) {
@@ -275,7 +291,56 @@ export class Game {
   }
 
   discover(key, text) {
+    const log = this.save.data.log;
+    if (log.some((e) => e.key === key)) return false;
+    log.push({ key, text, kind: this.currentCell?.kindId || null });
+    this.save.write();
+    this.ui.caption('(Noted in the logbook.)', 2.5);
     for (const sys of this.listeners) sys.discover?.(this, key, text);
+    return true;
+  }
+
+  /**
+   * Caught by a hunter: fade to black, skip the tape, wake up somewhere else. Deterministic:
+   * where you wake depends on the seed and how many times this has happened.
+   */
+  checkOut(why) {
+    if (this.checkingOut) return;
+    const n = (this.save.data.checkouts = (this.save.data.checkouts || 0) + 1);
+    const a = hashFloat(this.worldSeed, 'wake', n) * Math.PI * 2;
+    const dist = 3 + Math.floor(hashFloat(this.worldSeed, 'wakeD', n) * 3);
+    const cx = Math.floor(this.player.x / CELL) + Math.round(Math.cos(a) * dist);
+    const cz = Math.floor(this.player.z / CELL) + Math.round(Math.sin(a) * dist);
+    this.checkingOut = { why, t: 0, cx, cz, moved: false };
+    this.audio.play('checkIn', null, { wet: 0.6 });
+    this.standUp();
+  }
+
+  updateCheckOut() {
+    const c = this.checkingOut;
+    if (!c) return;
+    c.t++;
+    if (c.t === 70) {
+      // black: move the player while nobody is looking
+      for (const s of [...this.entities.states]) if (s.type !== 'waitingGuest') this.entities.remove(s);
+      this.world.ensureAround(c.cx * CELL + 8, c.cz * CELL + 8);
+    }
+    if (c.t > 70 && !c.moved) {
+      const cell = this.world.cells.get(`${c.cx},${c.cz}`);
+      if (cell) {
+        const sp = this.findOpenSpot(cell, cell.points.resident || cell.points.spawn || { x: 8, z: 8 });
+        this.player.x = this.prev.x = sp.x;
+        this.player.z = this.prev.z = sp.z;
+        this.player.vx = this.player.vz = 0;
+        c.moved = true;
+        c.movedAt = c.t;
+      }
+    }
+    if (c.moved && c.t - c.movedAt === 90) {
+      this.ui.caption(this.momentRng.next() < 0.5 ? 'The tape skips. You are somewhere else.' : 'Checked out. The lights are still on.', 4);
+      this.discover('event:checkedOut', 'The porter reached me. Then the tape skipped, and I was standing in another part of the building.');
+    }
+    if (c.moved && c.t - c.movedAt > 150) this.checkingOut = null;
   }
 
   // ---- frame ------------------------------------------------------------------------------------
@@ -337,6 +402,10 @@ export class Game {
     this.flashlight.intensity += (target - this.flashlight.intensity) * Math.min(1, dt * 20);
 
     this.cam.uniforms.uTime.value = t;
+    const c = this.checkingOut;
+    const fadeTarget = c && (!c.moved || c.t - c.movedAt < 50) ? 0 : 1;
+    this.fade += (fadeTarget - this.fade) * Math.min(1, dt * (fadeTarget ? 1.2 : 2.2));
+    this.cam.uniforms.uFade.value = this.fade;
     this.audio.setListener(x, eye, z, p.yaw);
     if (this.currentCell) {
       const s = this.currentCell.kind.sounds || {};
@@ -378,7 +447,58 @@ export class Game {
     if (opts.flashlight !== undefined) this.flashlight.intensity = p.flashlight ? 14 : 0;
     this.mats.update(this.time);
     this.composer.render();
+    if (opts.freeze !== false) this.debugFreeze();
     return { cell: cell ? `${cell.cx},${cell.cz} ${cell.kindId}` : null };
+  }
+
+  /**
+   * Copy the frame just rendered into a fixed overlay canvas so screenshots of a paused or hidden
+   * page show exactly it (the live canvas can present a stale frame). Pass false to remove it.
+   */
+  debugFreeze(on = true) {
+    let cv = document.getElementById('debug-freeze');
+    if (!on) return cv?.remove();
+    if (!cv) {
+      cv = document.createElement('canvas');
+      cv.id = 'debug-freeze';
+      cv.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:9999;pointer-events:none';
+      document.body.appendChild(cv);
+    }
+    const src = this.renderer.domElement;
+    cv.width = src.width;
+    cv.height = src.height;
+    cv.getContext('2d').drawImage(src, 0, 0);
+    this._frozen = cv;
+  }
+
+  /** Dev server only: save the frozen frame to shots/<name>.jpg. */
+  async debugSave(name = 'shot') {
+    const cv = this._frozen || this.renderer.domElement;
+    const body = cv.toDataURL('image/jpeg', 0.88);
+    const r = await fetch(`${import.meta.env.BASE_URL}__shot?name=${encodeURIComponent(name)}`, { method: 'POST', body });
+    return r.ok ? `shots/${name}.jpg` : 'failed';
+  }
+
+  /** Wait (without timers, which hidden tabs throttle) until nearby cells are built. */
+  async debugSettle(maxMs = 8000) {
+    const yieldNow = () => new Promise((r) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = () => r();
+      ch.port2.postMessage(0);
+    });
+    const t0 = performance.now();
+    this.world.ensureAround(this.player.x, this.player.z);
+    while (performance.now() - t0 < maxMs) {
+      this.world.update(50);
+      if (!this.world.waiting.size && !this.world.buildQueue.length) break;
+      await yieldNow();
+    }
+    return this.world.cells.size;
+  }
+
+  /** Run n simulation ticks immediately (tests). */
+  debugTicks(n) {
+    for (let k = 0; k < n; k++) this.simTick();
   }
 
   /** Render n frames synchronously and return average ms per frame (GPU-synced). */
