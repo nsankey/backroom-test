@@ -235,7 +235,13 @@ button:focus-visible {
   min-width: 0;
 }
 .paper {
-  background: var(--paper);
+  background:
+    radial-gradient(circle at 82% 16%, transparent 34px, rgba(120, 82, 40, 0.16) 36px, rgba(120, 82, 40, 0.06) 39px, transparent 41px),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(150, 120, 60, 0.22) 100%),
+    linear-gradient(176deg, rgba(255, 255, 240, 0.12), rgba(120, 100, 60, 0.08)),
+    var(--paper);
+  max-height: 88vh;
+  overflow-y: auto;
   color: var(--ink);
   font-family: var(--font-type);
   padding: 36px 40px;
@@ -352,6 +358,13 @@ textarea {
   padding-bottom: 6px;
 }
 .panel-inner .eyebrow {
+  letter-spacing: 0.15em;
+}
+button.mini {
+  min-width: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-left: 6px;
   letter-spacing: 0.15em;
 }
 .card .noimg.nosignal {

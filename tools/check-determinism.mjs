@@ -7,6 +7,7 @@
 import { generateCell } from '../src/world/gen.js';
 import { KIND_LIST } from '../src/world/kinds/index.js';
 import { hashStr } from '../src/core/rng.js';
+import { readFileSync } from 'node:fs';
 
 const perKind = Number(process.argv[2] || 40);
 
@@ -73,6 +74,19 @@ for (const kind of KIND_LIST) {
       `avg ${(ms / perKind).toFixed(0)} ms, avg ${Math.round(tris / perKind)} tris, ${((dark / perKind) * 100).toFixed(1)}% dark tiles`,
   );
 }
+
+// lore: every kind has exactly one found document, and every kind places its lore stand
+const lore = JSON.parse(readFileSync(new URL('../lore/fragments.json', import.meta.url), 'utf8'));
+for (const kind of KIND_LIST) {
+  const doc = lore.fragments[kind.id];
+  const words = doc ? doc.body.split(/\s+/).length : 0;
+  const placed = generateCell(1979, 0, 0, { kindOverride: kind.id }).data.interactions.some((i) => i.type === 'readLore');
+  if (!doc || !doc.log || !doc.head || !placed) {
+    console.log(`  LORE: ${kind.id} ${doc ? '' : 'has no fragment '}${placed ? '' : 'places no document'}`);
+    failures++;
+  } else if (words > 140) console.log(`  lore note: ${kind.id} body is ${words} words (rule: ~120)`);
+}
+for (const id of Object.keys(lore.fragments)) if (!KIND_LIST.some((k) => k.id === id)) console.log(`  lore note: fragment for unknown kind ${id}`);
 
 // world fingerprint: a 5 x 5 patch of seed 1979
 let world = '';

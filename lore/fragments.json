@@ -1,0 +1,51 @@
+{
+  "_rules": [
+    "AUTHORING RULES FOR FUTURE BUILDERS. Read docs/ORIGIN.md and docs/STYLE.md first.",
+    "1. One document per place kind. The key in `fragments` is the kind id (src/world/kinds/<id>.js). Every kind must have one; the game places it on a stand just inside the place's first door.",
+    "2. Each document reveals ONE thread from ORIGIN.md (name it in `thread`), from inside the world: a brochure, memo, chart, card, letter, log. Never narrate the backstory, never explain what is happening, never confirm a theory. The player should finish reading with a better question, not an answer.",
+    "3. Voice and era: 1971-1979, a research institute pretending to be a motor hotel. Typewriter or careful handwriting. Plain, specific details (room numbers, dollar amounts, form numbers) beat adjectives.",
+    "4. Never write a clock time that moves. Watches have no hands. Use '--:--' or leave times blank. The tape stamp (3:14 AM, MAR. 14 1979) belongs to the camera, not to documents.",
+    "5. Banned: gore, bodies, blood, the words monster / dimension / backrooms / portal / loop, jokes that wink at the player, modern words. Nothing in a document may contradict ORIGIN.md.",
+    "6. Length: `body` at most ~120 words. `[[text]]` renders as a redaction bar (use at most two per document). `\\n` is a line break.",
+    "7. `log` is the logbook line the player writes after reading: first person, past tense, at most 25 words, states what was read, not what it means.",
+    "8. `head` is the document's own header line (form title, letterhead, label). `sign` is an optional signature or footer.",
+    "9. Threads in use so far: volunteers, watches, checkingOut, keepLightsOn, halesPlans, theSeal. Spread new documents across threads; do not reveal theSeal or the end of halesPlans in a place that is common."
+  ],
+  "fragments": {
+    "lobby": {
+      "thread": "volunteers",
+      "head": "ASTER-VALE FOUNDATION  -  A RESTFUL WEEK AT THE MERIDIAN LODGE",
+      "body": "Tired of being tired?\n\nThe Aster-Vale Foundation invites healthy adults, 21 to 55, to spend seven restful days at the Meridian Lodge as paid guests of our Continuous Habitation program.\n\n  - $40.00 per day, paid at check-out\n  - Private room, color television, meals at all hours\n  - Every room lit for your comfort, day and night\n\nThere are no chores and no schedules. You will not be asked to do anything at all, except stay.\n\nPlease leave your wristwatch at the Front Desk on arrival. A Lodge watch will be issued.",
+      "sign": "Form AV-7 (rev. 1973). Detach and return the card below to reserve your week.",
+      "log": "A brochure at the front desk: paid volunteers, a restful week, every room lit day and night. Leave your watch at the desk."
+    },
+    "guestCorridor": {
+      "thread": "checkingOut",
+      "head": "HOUSEKEEPING - FLOOR SHEET - WEST WING",
+      "body": "RM   STATUS          NOTES\n112  occupied        asked for extra blankets again\n113  occupied\n114  CHECKED OUT     bed made, key at desk\n115  CHECKED OUT     bed made, key at desk\n116  ???             door here today. not on sheet.\n                     knocked, no answer. lights on.\n117  CHECKED OUT     key at desk\n\nCarts and anything else left in the hall go to the Night Porter. Do not move items yourself.\n\nRooms 114-117 to be re-measured. Corridor seems [[longer going back]]. Refer to Mr. Hale.",
+      "sign": "Initialed: M.R., night shift",
+      "log": "A housekeeping sheet: guests checked out, keys left at the desk, and a room 116 that was not on the sheet the day before."
+    },
+    "guestRooms": {
+      "thread": "watches",
+      "head": "POSTCARD  -  THE MERIDIAN LODGE (not mailed)",
+      "body": "Ruth -\n\nDay four, I think. Or five. They took my watch at the desk like the paper said and gave me a Lodge watch. It has no hands. I laughed. The clerk didn't.\n\nI feel fine. That's the thing. I haven't been tired since the first night and I don't miss it. The lamp is always on and the TV is always on and somebody is always walking past the door.\n\nI asked a maid what time it was. She said it's the same time it's been.\n\nForty dollars a day. Tell the boys I'll be home when the week's up.",
+      "sign": "- Walt, Rm. 2[[  ]]",
+      "log": "An unmailed postcard from a guest named Walt. They took his watch and gave him one with no hands. He felt fine."
+    },
+    "iceVending": {
+      "thread": "keepLightsOn",
+      "head": "MEMORANDUM  -  TO: ALL STAFF  -  FROM: DR. I. VARGA  -  RE: FIXTURES",
+      "body": "Effective immediately:\n\n1. No fixture in the Lodge is to be allowed to go dark. Not for cleaning, not for repair, not for a guest's comfort.\n\n2. A failing tube is to be reported at once and replaced within the hour. Carry spares.\n\n3. If a room cannot be relit, vacate it, shut the door and report the room number to the Front Desk. Do not re-enter it to check. It will not be the same room.\n\n4. The night shift will walk every hall continuously.\n\nThe building does what we teach it. We are teaching it [[to stay awake]].",
+      "sign": "Posted by the ice machine, Copy 3 of 12",
+      "log": "A memo from Dr. Varga, taped by the ice machine: no light may ever go dark. A dark room is to be shut and never re-entered."
+    },
+    "sleepLab": {
+      "thread": "checkingOut",
+      "head": "CONTINUOUS HABITATION STUDY  -  OBSERVATION LOG  -  WARD B",
+      "body": "SUBJ  HRS SLEPT  REMARKS\n09    0          reports feeling rested. alert.\n10    0          reports feeling rested.\n11    0          asked which room he is in. room number given (Rm 240). there is no Rm 240 on the plan. refer D. Hale.\n12    0          'I can hear the building thinking.' calm.\n11    -          checked out. bed made. key returned to desk by [[         ]].\n\nTime of entry: --:--  (no reference available)",
+      "sign": "Observer: E. Lindqvist, R.N.",
+      "log": "An observation log from the sleep study. Nobody slept. Subject 11 asked about a room that was not on the plan, then checked out."
+    }
+  }
+}

@@ -11,8 +11,8 @@ Phase 1 of docs/PLAN.md, following docs/PHASE1_PROMPT.md. Re-read before each st
 | 2. Room format and generator | done: 5 places, determinism check passes |
 | 3. Entities | done: moments API, Night Porter (hunter), Waiting Guest (resident) |
 | 4. Player kit | done: flashlight, floor plan, logbook, discoveries, saves + codes |
-| 5. Lore | next |
-| 6. Deploy | - |
+| 5. Lore | done: lore/fragments.json, one document per place, paper overlay |
+| 6. Deploy | next |
 | 7. Fill out to 8 / 2 / 2 | - |
 
 ## How to run
@@ -135,9 +135,20 @@ hunter on the next tick; `__game.debugNoHunters = true` keeps them away. Note ya
   fixture within ~4 m, and the determinism check reports "% dark tiles" per kind (was 16-23 % in
   the guest wing and ice/vending, now under 0.3 % everywhere).
 
+### Step 5
+- `lore/fragments.json`: authoring rules for future builders at the top (`_rules`), then one
+  document per kind id. Each serves one ORIGIN thread in an in-world voice (brochure, housekeeping
+  sheet, unmailed postcard, staff memo, observation log), with `[[redactions]]`, never explaining.
+- `kit.placeLore` puts a walnut pedestal table with the document just inside the place's first
+  door (vestibule carved if needed). E opens a paper overlay (aged paper, ring stain), logs a
+  one-line summary, counts toward "documents" on the discoveries screen; the logbook can re-open it.
+- `npm run check:determinism` now also fails if any kind lacks a fragment or a placed document,
+  and notes bodies over ~120 words.
+- Bug fixed: closing the paper with E also reached the game input and picked it up again.
+
 ## Known issues
 - Pointer lock is unavailable in the automation browser; screenshots use `debugView`.
 - Discovering a place costs one ~20-70 ms frame (vantage search + an extra render). Rare.
 
 ## Next
-- Step 5: lore fragments, one document per place just inside its first door.
+- Step 6: GitHub Pages deploy.

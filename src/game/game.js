@@ -17,6 +17,7 @@ import { CamcorderShader } from '../render/camcorder.js';
 import { World } from '../world/world.js';
 import { CELL, N } from '../world/constants.js';
 import { packCellMask } from './save.js';
+import FRAGMENTS from '../../lore/fragments.json';
 import { createPlayer, applyLook, stepPlayer } from './player.js';
 import { flickerLevel } from './flicker.js';
 import { Moments } from './moments.js';
@@ -392,8 +393,22 @@ export class Game {
       return;
     }
     for (const sys of this.listeners) if (sys.onInteract?.(this, near)) return;
+    if (it.type === 'readLore' && cell) return this.readLore(cell.kindId, near);
     const handler = cell?.kind?.interactions?.[it.type];
     if (handler) handler(this.moments.ctx(cell, it), it);
+  }
+
+  /** Pick up the place's found document: paper overlay, logbook line, discoveries count. */
+  readLore(kindId, near) {
+    const doc = FRAGMENTS.fragments[kindId];
+    if (!doc) return;
+    this.audio.play('paper', near ? { x: near.x, y: near.y, z: near.z } : null);
+    const first = !this.save.data.lore[kindId];
+    this.save.data.lore[kindId] = true;
+    this.save.markDiscovered('lore:' + kindId);
+    this.addLog('lore:' + kindId, doc.log, kindId);
+    this.save.write();
+    this.onUiAction?.('paper', { ...doc, kindId, first });
   }
 
   sit(p, yaw) {

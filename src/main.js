@@ -2,6 +2,7 @@ import { Game } from './game/game.js';
 import { Save } from './game/save.js';
 import { UI } from './ui/ui.js';
 import { mapPanel, logPanel, discoveriesPanel, optionsPanel, paperPanel } from './ui/panels.js';
+import FRAGMENTS from '../lore/fragments.json';
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug');
@@ -93,7 +94,7 @@ const PANEL_KEYS = { map: ['KeyM', 'Tab'], log: ['KeyL', 'KeyJ'], paper: ['KeyE'
 
 function openPanel(name, from, arg) {
   if (!game) return;
-  if (from === 'game') {
+  if (from === 'game' && !panel) {
     if (game.paused) return;
     game.pause();
     try {
@@ -117,20 +118,28 @@ function openPanel(name, from, arg) {
         rewind();
       },
     });
-  panel = { name, from };
+  panel = { name, from, arg };
   ui.show('#title', false);
   ui.show('#pause', false);
   ui.show('#hud', from === 'game' && name === 'paper');
   ui.show(el, true);
   el.scrollTop = 0;
   el.querySelector('[data-close]')?.addEventListener('click', closePanel);
+  // logbook: documents can be read again
+  for (const b of el.querySelectorAll('[data-read]'))
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const doc = FRAGMENTS.fragments[b.dataset.read];
+      if (doc) openPanel('paper', from, { ...doc, kindId: b.dataset.read });
+    });
 }
 
 function closePanel() {
   if (!panel) return;
-  const { from } = panel;
+  const { from, name, arg } = panel;
   panel = null;
   ui.show('#panel', false);
+  if (name === 'paper' && arg?.first) setTimeout(() => ui.caption('(Noted in the logbook.)', 2.5), 200);
   if (from === 'game') enter();
   else if (from === 'pause') ui.show('#pause', true);
   else ui.show('#title', true);
@@ -139,6 +148,9 @@ function closePanel() {
 window.addEventListener('keydown', (e) => {
   if (panel) {
     const keys = PANEL_KEYS[panel.name] || [];
+    // panel keys never reach the game's input (E would otherwise pick the document up again)
+    e.stopImmediatePropagation();
+    if (e.repeat) return;
     if (e.code === 'Escape' || keys.includes(e.code)) {
       e.preventDefault();
       closePanel();

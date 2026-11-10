@@ -165,8 +165,10 @@ export function logPanel(el, save) {
   const rows = log.length
     ? log
         .map((e) => {
-          const where = e.key.startsWith('place:') ? 'NEW PLACE' : KINDS[e.kind]?.card?.title || '';
-          return `<div class="log-entry"><div class="where">${esc(where.toUpperCase())}</div>${esc(e.text)}</div>`;
+          const lore = e.key.startsWith('lore:');
+          const where = e.key.startsWith('place:') ? 'NEW PLACE' : (lore ? 'DOCUMENT · ' : '') + (KINDS[e.kind]?.card?.title || '');
+          const again = lore ? ` <button class="mini" data-read="${esc(e.key.slice(5))}">read again</button>` : '';
+          return `<div class="log-entry"><div class="where">${esc(where.toUpperCase())}</div>${esc(e.text)}${again}</div>`;
         })
         .join('')
     : '<p class="empty">Nothing yet. Walk. Look. Read what was left on the desks.</p>';
