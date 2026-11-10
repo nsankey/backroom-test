@@ -1,0 +1,394 @@
+// Game: owns the renderer, the world, the simulation tick and the per-frame presentation.
+// Simulation (player, entities, flicker, timers) advances on a fixed 60 Hz tick from plain
+// state objects; rendering interpolates between ticks.
+
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+import { RNG, hash } from '../core/rng.js';
+import { Input } from '../core/input.js';
+import { AudioEngine } from '../audio/audio.js';
+import { MaterialLibrary } from '../render/materials.js';
+import { CamcorderShader } from '../render/camcorder.js';
+import { World } from '../world/world.js';
+import { CELL } from '../world/constants.js';
+import { createPlayer, applyLook, stepPlayer } from './player.js';
+import { flickerLevel } from './flicker.js';
+import { Moments } from './moments.js';
+import { TICK, TICK_HZ } from './constants.js';
+
+export class Game {
+  constructor({ canvas, ui, save, worldSeed, debug = false, kindAtOrigin = null }) {
+    this.canvas = canvas;
+    this.ui = ui;
+    this.save = save;
+    this.debug = debug;
+    this.worldSeed = worldSeed;
+    this.tick = 0;
+    this.time = 0;
+    this.paused = true;
+    this.momentRng = new RNG(hash(worldSeed, 'moments'));
+    this.events = [];
+    this.listeners = new Set(); // per-tick systems: { tick(game), frame?(game, dt) }
+
+    const renderer = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' }));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    this.quality = 0.8;
+
+    const scene = (this.scene = new THREE.Scene());
+    scene.background = new THREE.Color(0x050605);
+    scene.fog = new THREE.FogExp2(0x0b0d09, 0.05);
+    const camera = (this.camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 90));
+    scene.add(camera);
+
+    // the flashlight: the only real-time light in the game
+    const flash = (this.flashlight = new THREE.SpotLight(0xfff0d6, 0, 20, 0.42, 0.6, 1.6));
+    flash.position.set(0.18, -0.2, 0.05);
+    flash.target.position.set(0.05, -0.15, -4);
+    camera.add(flash, flash.target);
+
+    this.mats = new MaterialLibrary(renderer);
+    this.world = new World(scene, this.mats, worldSeed);
+    if (kindAtOrigin) this.world.kindOverrides.set('0,0', kindAtOrigin);
+    this.input = new Input(canvas);
+    this.audio = new AudioEngine();
+    this.moments = new Moments(this);
+
+    // post: render -> bloom -> tonemap/sRGB -> camcorder
+    const composer = (this.composer = new EffectComposer(renderer));
+    composer.addPass(new RenderPass(scene, camera));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(640, 360), 0.16, 0.2, 0.97);
+    composer.addPass(this.bloom);
+    composer.addPass(new OutputPass());
+    this.cam = new ShaderPass(CamcorderShader);
+    composer.addPass(this.cam);
+
+    this.player = null;
+    this.prev = { x: 0, z: 0, eye: 1.6, bob: 0 };
+    this.currentCell = null;
+    this.nearInteraction = null;
+    this.sitting = null;
+    this.fps = { frames: 0, t: 0, value: 0, worst: 0, frameMs: [] };
+
+    window.addEventListener('resize', () => this.resize());
+    this.resize();
+  }
+
+  resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const pr = Math.min(window.devicePixelRatio || 1, 1.5) * this.quality;
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(w, h, false);
+    this.composer.setPixelRatio(pr);
+    this.composer.setSize(w, h);
+    this.bloom.resolution.set(w * pr * 0.5, h * pr * 0.5);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.cam.uniforms.uRes.value.set(w * pr, h * pr);
+  }
+
+  async load(onProgress = () => {}) {
+    onProgress('developing textures');
+    await this.mats.loadAll();
+    onProgress('measuring rooms');
+    const s = this.save.data;
+    let px = s.player?.x;
+    let pz = s.player?.z;
+    let yaw = s.player?.yaw;
+    // build the starting cell (the queue only drains when update() runs, so pump it)
+    const pump = setInterval(() => this.world.update(50), 16);
+    try {
+      await this.world.ensureAround(px ?? CELL / 2, pz ?? CELL / 2);
+    } finally {
+      clearInterval(pump);
+    }
+    if (px === undefined) {
+      const cell = this.world.cells.get('0,0');
+      const sp = cell.points.spawn || { x: 8, z: 8 };
+      px = sp.x;
+      pz = sp.z;
+      const desk = cell.points.desk;
+      yaw = desk ? Math.atan2(-(desk.x - sp.x), -(desk.z - sp.z)) : 0;
+    }
+    this.player = createPlayer(px, pz, yaw ?? 0);
+    if (s.player?.flashlight) this.player.flashlight = true;
+    this.prev = { x: px, z: pz, eye: this.player.eye, bob: 0 };
+    // warm up: compile shaders, finish neighbours
+    this.renderer.compile(this.scene, this.camera);
+    for (let k = 0; k < 6; k++) this.world.update(50);
+    this.ensureLoop();
+  }
+
+  ensureLoop() {
+    if (this._looping) return;
+    this._looping = true;
+    this.last = performance.now();
+    const frame = (now) => {
+      this.frame(now);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  start() {
+    this.paused = false;
+    this.audio.init();
+    this.input.clear();
+  }
+
+  pause() {
+    this.paused = true;
+    this.input.clear();
+  }
+
+  // ---- simulation tick ------------------------------------------------------------------------
+
+  simTick() {
+    this.tick++;
+    const p = this.player;
+    const actions = this.input.takeActions();
+    if (this.sitting && (actions.moveX || actions.moveZ)) this.standUp();
+    if (this.sitting) {
+      actions.moveX = 0;
+      actions.moveZ = 0;
+    }
+    const events = [];
+    this.prev.x = p.x;
+    this.prev.z = p.z;
+    this.prev.eye = p.eye;
+    this.prev.bob = p.bob;
+    stepPlayer(p, actions, this.world, TICK, events);
+    if (this.sitting) p.eye = 1.1;
+
+    // cell streaming & current place
+    const cell = this.world.cellAt(p.x, p.z);
+    if (cell !== this.currentCell) this.enterCell(cell);
+    if (Math.floor(this.tick) % 15 === 0) this.world.ensureAround(p.x, p.z);
+
+    // flicker per cell, from the shared tick
+    for (const c of this.world.cells.values()) {
+      c.uniforms.uFlicker.value = flickerLevel(c.seed, this.tick);
+    }
+
+    this.moments.update(this.tick);
+    for (const sys of this.listeners) sys.tick?.(this, actions, events);
+
+    // interactions
+    this.nearInteraction = this.findInteraction();
+    if (actions.interact && this.nearInteraction) this.interact(this.nearInteraction);
+
+    for (const e of events) this.handleEvent(e);
+  }
+
+  handleEvent(e) {
+    if (e.type === 'step') {
+      const t = this.world.tileAt(e.x, e.z);
+      this.audio.step(t && t.hard ? 'hard' : 'soft', e.run, e.crouch);
+    } else if (e.type === 'flashlight') {
+      this.audio.play('click');
+    }
+  }
+
+  enterCell(cell) {
+    const prev = this.currentCell;
+    this.currentCell = cell;
+    if (!cell) return;
+    const s = cell.kind.sounds || {};
+    this.audio.setRoomType(s.room || 'medium');
+    for (const sys of this.listeners) sys.enterCell?.(this, cell, prev);
+  }
+
+  findInteraction() {
+    const p = this.player;
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    let best = null;
+    let bestScore = Infinity;
+    const consider = (it, wx, wy, wz) => {
+      const dx = wx - p.x;
+      const dz = wz - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d > it.radius) return;
+      const facing = (dx * fx + dz * fz) / (d || 1);
+      if (d > 0.5 && facing < 0.35) return;
+      const score = d * (1.6 - facing);
+      if (score < bestScore && this.world.lineOfSight(p.x, p.z, wx, wz, 1.0)) {
+        bestScore = score;
+        best = { it, x: wx, y: wy, z: wz };
+      }
+    };
+    const cell = this.currentCell;
+    if (cell) for (const it of cell.interactions) if (!it.done) consider(it, cell.ox + it.x, it.y, cell.oz + it.z);
+    for (const it of this.moments.temp) consider(it, it.x, it.y, it.z);
+    for (const sys of this.listeners) if (sys.interactions) for (const it of sys.interactions(this)) consider(it, it.x, it.y, it.z);
+    if (best) best.cell = cell;
+    return best;
+  }
+
+  interact(near) {
+    const { it, cell } = near;
+    if (it.fn) {
+      it.fn(this.moments.ctx(null, { x: near.x, y: near.y, z: near.z }));
+      return;
+    }
+    for (const sys of this.listeners) if (sys.onInteract?.(this, near)) return;
+    const handler = cell?.kind?.interactions?.[it.type];
+    if (handler) handler(this.moments.ctx(cell, it), it);
+  }
+
+  sit(p, yaw) {
+    this.sitting = { x: p.x, z: p.z };
+    this.player.x = p.x;
+    this.player.z = p.z;
+    if (yaw !== undefined) this.player.yaw = yaw;
+    this.player.vx = this.player.vz = 0;
+  }
+
+  standUp() {
+    this.sitting = null;
+  }
+
+  discover(key, text) {
+    for (const sys of this.listeners) sys.discover?.(this, key, text);
+  }
+
+  // ---- frame ------------------------------------------------------------------------------------
+
+  frame(now) {
+    let dt = (now - this.last) / 1000;
+    this.last = now;
+    if (dt > 0.25) dt = 0.25;
+    this.trackFps(dt);
+    if (!this.player) return;
+
+    if (!this.paused) {
+      applyLook(this.player, this.input.takeLook());
+      this.acc = (this.acc || 0) + dt;
+      let n = 0;
+      while (this.acc >= TICK && n < 8) {
+        this.simTick();
+        this.acc -= TICK;
+        n++;
+      }
+      if (n === 8) this.acc = 0;
+      this.time += dt;
+    }
+    const alpha = this.paused ? 1 : this.acc / TICK;
+    this.present(alpha, dt);
+    this.world.update(this.paused ? 8 : 3);
+    this.mats.update(this.time);
+    for (const sys of this.listeners) sys.frame?.(this, dt, alpha);
+    this.composer.render();
+  }
+
+  present(alpha, dt) {
+    const p = this.player;
+    const x = this.prev.x + (p.x - this.prev.x) * alpha;
+    const z = this.prev.z + (p.z - this.prev.z) * alpha;
+    const eye = this.prev.eye + (p.eye - this.prev.eye) * alpha;
+    const bob = this.prev.bob + (p.bob - this.prev.bob) * alpha;
+    const t = this.time;
+    const speedK = Math.min(1, p.speed / 3.7);
+    const bobY = Math.abs(Math.sin(bob)) * 0.035 * (0.4 + speedK);
+    const bobX = Math.cos(bob) * 0.02 * (0.4 + speedK);
+    // handheld sway: slow layered sines
+    const swayY = Math.sin(t * 0.7) * 0.004 + Math.sin(t * 1.9 + 1.3) * 0.002;
+    const swayP = Math.sin(t * 0.9 + 0.5) * 0.004 + Math.sin(t * 2.3) * 0.0015;
+    const cam = this.camera;
+    const sy = Math.sin(p.yaw);
+    const cy = Math.cos(p.yaw);
+    cam.position.set(x + cy * bobX, eye + bobY - 0.02, z - sy * bobX);
+    cam.rotation.order = 'YXZ';
+    cam.rotation.y = p.yaw + swayY;
+    cam.rotation.x = p.pitch + swayP;
+    // roll a touch when strafing
+    const side = p.vx * cy - p.vz * sy;
+    this.roll = (this.roll || 0) + (-side * 0.012 - (this.roll || 0)) * Math.min(1, dt * 5);
+    cam.rotation.z = this.roll + Math.sin(t * 0.5) * 0.003;
+
+    // flashlight
+    const target = p.flashlight && p.battery > 0 ? 14 * (0.35 + 0.65 * Math.min(1, p.battery * 4)) : 0;
+    this.flashlight.intensity += (target - this.flashlight.intensity) * Math.min(1, dt * 20);
+
+    this.cam.uniforms.uTime.value = t;
+    this.audio.setListener(x, eye, z, p.yaw);
+    if (this.currentCell) {
+      const s = this.currentCell.kind.sounds || {};
+      this.audio.setBed(s.hum, 1, this.currentCell.uniforms.uDim.value);
+    }
+  }
+
+  trackFps(dt) {
+    const f = this.fps;
+    f.frames++;
+    f.t += dt;
+    f.worst = Math.max(f.worst, dt);
+    if (f.t >= 1) {
+      f.value = f.frames / f.t;
+      f.lastWorst = f.worst * 1000;
+      f.frames = 0;
+      f.t = 0;
+      f.worst = 0;
+    }
+  }
+
+  // ---- debug / test hooks (used by automated checks and screenshots) -------------------------
+
+  /** Put the camera somewhere and render one frame immediately. */
+  debugView(x, z, yaw = this.player.yaw, pitch = 0, opts = {}) {
+    const p = this.player;
+    p.x = x;
+    p.z = z;
+    p.yaw = yaw;
+    p.pitch = pitch;
+    if (opts.flashlight !== undefined) p.flashlight = opts.flashlight;
+    this.prev = { x, z, eye: p.eye, bob: p.bob };
+    this.world.ensureAround(x, z);
+    for (let k = 0; k < 4; k++) this.world.update(100);
+    const cell = this.world.cellAt(x, z);
+    if (cell !== this.currentCell) this.enterCell(cell);
+    for (let k = 0; k < (opts.ticks ?? 1); k++) this.simTick();
+    this.present(1, 1 / 60);
+    if (opts.flashlight !== undefined) this.flashlight.intensity = p.flashlight ? 14 : 0;
+    this.mats.update(this.time);
+    this.composer.render();
+    return { cell: cell ? `${cell.cx},${cell.cz} ${cell.kindId}` : null };
+  }
+
+  /** Render n frames synchronously and return average ms per frame (GPU-synced). */
+  benchmark(n = 60) {
+    const gl = this.renderer.getContext();
+    const px = new Uint8Array(4);
+    this.composer.render();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const t0 = performance.now();
+    for (let k = 0; k < n; k++) {
+      this.time += 1 / 60;
+      this.present(1, 1 / 60);
+      this.mats.update(this.time);
+      this.composer.render();
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    }
+    const ms = (performance.now() - t0) / n;
+    const size = new THREE.Vector2();
+    this.renderer.getDrawingBufferSize(size);
+    return { msPerFrame: +ms.toFixed(2), fps: +(1000 / ms).toFixed(0), buffer: `${size.x}x${size.y}`, calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles };
+  }
+
+  /** Plain snapshot of the simulation (what multiplayer would sync). */
+  snapshot() {
+    const p = this.player;
+    return { tick: this.tick, player: { x: p.x, z: p.z, yaw: p.yaw, pitch: p.pitch, crouch: p.crouch, flashlight: p.flashlight } };
+  }
+
+  get tickHz() {
+    return TICK_HZ;
+  }
+}

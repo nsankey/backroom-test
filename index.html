@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A first-person found-footage walk through a 1970s research hotel where the lights never turned off." />
+    <title>Meridian Lodge</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="rec"><span class="dot"></span>REC</div>
+      <div id="play">&#9654; PLAY &nbsp;SP</div>
+      <div id="stamp"></div>
+      <div id="battery"></div>
+      <div id="reticle"></div>
+      <div id="prompt"></div>
+      <div id="caption"></div>
+    </div>
+
+    <div id="title" class="screen">
+      <div class="title-inner">
+        <div class="eyebrow">ASTER-VALE FOUNDATION &middot; TAPE 7</div>
+        <h1>MERIDIAN LODGE</h1>
+        <p class="tag">The lights are still on.</p>
+        <div class="menu">
+          <button id="btn-continue" class="hidden">Continue</button>
+          <button id="btn-new">Enter</button>
+          <button id="btn-discoveries">Discoveries</button>
+          <button id="btn-options">Options</button>
+        </div>
+        <p id="loading" class="loading"></p>
+        <p class="keys">WASD move &middot; Shift run &middot; C crouch &middot; E use &middot; F flashlight &middot; M map &middot; L logbook &middot; Esc pause</p>
+      </div>
+    </div>
+
+    <div id="pause" class="screen hidden">
+      <div class="title-inner">
+        <h2>PAUSED</h2>
+        <div class="menu">
+          <button id="btn-resume">Resume</button>
+          <button id="btn-pause-log">Logbook</button>
+          <button id="btn-pause-map">Map</button>
+          <button id="btn-quit">Title screen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel" class="screen hidden"></div>
+
+    <div id="debug" class="hidden"></div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
