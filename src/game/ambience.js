@@ -27,6 +27,17 @@ export class Ambience {
         game.audio.play(name, { x: p.x + Math.cos(a) * d, y: 1.4, z: p.z + Math.sin(a) * d }, { muffled: true, wet: 0.7 });
       }
     }
+    // places with a bandstand or a speaker play muzak from that spot while you are in them
+    const mp = cell.points.muzak;
+    if (mp && this.muzakCell !== cell) {
+      this.muzak?.stop();
+      this.muzak = game.audio.loop('muzak', { x: cell.ox + mp.x, y: 1.8, z: cell.oz + mp.z }, { ref: 3, wet: 0.7, level: 0.55 });
+      this.muzakCell = cell;
+    } else if (!mp && this.muzak && this.muzakCell !== cell) {
+      this.muzak.stop();
+      this.muzak = null;
+      this.muzakCell = null;
+    }
     // light stutter -> crackle
     const f = cell.uniforms.uFlicker.value;
     if (Math.abs(f - this.lastFlicker) > 0.4 && this.rng.chance(0.6)) game.audio.crackle(0.6 + this.rng.float(0, 0.4));

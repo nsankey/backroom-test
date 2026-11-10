@@ -9,7 +9,7 @@ import { Plan } from './plan.js';
 import { SceneBuilder } from './builder.js';
 import { buildProp } from './props.js';
 
-const HARD = new Set(['terrazzo', 'vinylCheck', 'whiteTile', 'concrete', 'threshold', 'stainless']);
+const HARD = new Set(['terrazzo', 'vinylCheck', 'whiteTile', 'concrete', 'threshold', 'stainless', 'parquet']);
 
 export function planCell(worldSeed, cx, cz, kindOverride = null) {
   const kindId = kindOverride || cellKindId(worldSeed, cx, cz);

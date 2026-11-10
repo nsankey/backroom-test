@@ -475,6 +475,23 @@ const SOUNDS = {
     o.start(t);
     o.stop(t + 3.6);
   },
+  tubePop(ae, out, t) {
+    // a fluorescent tube giving out: a hard tick, a glassy ping, the ballast buzz dying away
+    noiseBurst(ae, out, t, { freq: 4200, q: 1.5, peak: 0.32, d: 0.02 });
+    tone(ae, out, t + 0.004, 2900 + ae.rng.float(-300, 300), 'sine', 0.03, 0.001, 0.25);
+    const o = ae.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.6);
+    const f = ae.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 600;
+    const g = ae.ctx.createGain();
+    env(g, t + 0.01, 0.01, 0.05, 0.6);
+    o.connect(f).connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 0.7);
+  },
   checkIn(ae, out, t) {
     // the bell, reversed-feeling: soft attack, sudden stop
     for (const [m, gg] of [[1, 0.15], [2.76, 0.06]]) {
@@ -556,6 +573,33 @@ const LOOPS = {
     };
     tick();
     return [() => (stopped = true)];
+  },
+  hush(ae, out) {
+    // the sound of a room with its lights out: pressure, a slow sub-tone, no hum at all
+    const ctx = ae.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = ae.pinkBuf;
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 160;
+    const g = ctx.createGain();
+    g.gain.value = 0.22;
+    const o = ctx.createOscillator();
+    o.frequency.value = 36;
+    const og = ctx.createGain();
+    og.gain.value = 0.1;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.13;
+    const lg = ctx.createGain();
+    lg.gain.value = 0.06;
+    lfo.connect(lg).connect(og.gain);
+    src.connect(f).connect(g).connect(out);
+    o.connect(og).connect(out);
+    src.start();
+    o.start();
+    lfo.start();
+    return [() => src.stop(), () => o.stop(), () => lfo.stop()];
   },
   breath(ae, out) {
     const ctx = ae.ctx;

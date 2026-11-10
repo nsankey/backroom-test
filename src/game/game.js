@@ -270,7 +270,7 @@ export class Game {
     }
     const pk = 'place:' + cell.kindId;
     if (!this.discoverThing(pk, cell.kind.card, cell.kindId) && !this.save.thumbs[pk] && !this.thumbQueue.some((q) => q.key === pk))
-      this.thumbQueue.push({ key: pk, at: this.time + 1.6, vantage: true }); // a photo missed last time
+      this.thumbQueue.push({ key: pk, at: this.time + 1.6, vantage: true, cellKey: cell.key }); // a photo missed last time
   }
 
   /**
@@ -281,7 +281,8 @@ export class Game {
     if (!card || !this.save.markDiscovered(key)) return false;
     this.addLog(key, `${card.title}. ${card.blurb}`, kindId);
     this.ui.caption(card.title.toUpperCase(), 3);
-    if (!this.save.thumbs[key]) this.thumbQueue.push({ key, at: this.time + thumbDelay, vantage: key.startsWith('place:') });
+    const place = key.startsWith('place:');
+    if (!this.save.thumbs[key]) this.thumbQueue.push({ key, at: this.time + thumbDelay, vantage: place, cellKey: place ? this.currentCell?.key : null });
     return true;
   }
 
@@ -453,7 +454,7 @@ export class Game {
     c.t++;
     if (c.t === 70) {
       // black: move the player while nobody is looking
-      for (const s of [...this.entities.states]) if (s.type !== 'waitingGuest') this.entities.remove(s);
+      for (const s of [...this.entities.states]) if (this.entities.isHunter(s)) this.entities.remove(s);
       this.world.ensureAround(c.cx * CELL + 8, c.cz * CELL + 8);
     }
     if (c.t > 70 && !c.moved) {
@@ -469,7 +470,8 @@ export class Game {
     }
     if (c.moved && c.t - c.movedAt === 90) {
       this.ui.caption(this.momentRng.next() < 0.5 ? 'The tape skips. You are somewhere else.' : 'Checked out. The lights are still on.', 4);
-      this.discover('event:checkedOut', 'The porter reached me. Then the tape skipped, and I was standing in another part of the building.');
+      const who = c.why === 'unlit' ? 'The dark closed over me with my torch off' : 'The porter reached me';
+      this.discover('event:checkedOut', `${who}. Then the tape skipped, and I was standing in another part of the building.`);
     }
     if (c.moved && c.t - c.movedAt > 150) this.checkingOut = null;
   }
@@ -503,7 +505,9 @@ export class Game {
     this.composer.render();
     // thumbnails are taken right after a render, while the drawing buffer is still valid
     const q = this.thumbQueue[0];
-    if (q && !this.paused && !this.checkingOut && this.fade > 0.97 && this.time >= q.at) {
+    // a place's photo is only taken while you are still in it (otherwise it is retaken next visit)
+    if (q && q.cellKey && this.currentCell?.key !== q.cellKey) this.thumbQueue.shift();
+    else if (q && !this.paused && !this.checkingOut && this.fade > 0.97 && this.time >= q.at) {
       this.thumbQueue.shift();
       const v = q.vantage && this.currentCell ? this.findVantage(this.currentCell) : null;
       if (v) {
@@ -521,6 +525,15 @@ export class Game {
         this.composer.render();
       } else this.captureThumb(q.key);
     }
+  }
+
+  /** Tests: run the frame loop n times with a fixed step, as if unpaused (takes queued photos). */
+  debugRunFrames(n = 30, step = 1 / 30) {
+    const was = this.paused;
+    this.paused = false;
+    for (let k = 0; k < n; k++) this.frame(this.last + step * 1000);
+    this.paused = was;
+    this.last = performance.now();
   }
 
   present(alpha, dt) {
@@ -587,6 +600,8 @@ export class Game {
     p.z = z;
     p.yaw = yaw;
     p.pitch = pitch;
+    p.vx = p.vz = 0;
+    this.roll = 0;
     if (opts.flashlight !== undefined) p.flashlight = opts.flashlight;
     this.prev = { x, z, eye: p.eye, bob: p.bob };
     this.world.ensureAround(x, z);
@@ -594,6 +609,9 @@ export class Game {
     const cell = this.world.cellAt(x, z);
     if (cell !== this.currentCell) this.enterCell(cell);
     for (let k = 0; k < (opts.ticks ?? 1); k++) this.simTick();
+    p.vx = p.vz = 0;
+    this.roll = 0;
+    this.entities.frame(this, 1 / 60, 1); // views exist and are posed even while paused
     this.present(1, 1 / 60);
     if (opts.flashlight !== undefined) this.flashlight.intensity = p.flashlight ? 14 : 0;
     this.mats.update(this.time);

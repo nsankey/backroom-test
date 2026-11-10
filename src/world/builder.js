@@ -166,7 +166,12 @@ export class SceneBuilder {
     const segs = opts.segs ?? 10;
     const glow = !!opts.glow;
     const b = this.buf(mat, glow);
+    // opts.rx: lie the cylinder down so its axis runs toward +z (rotate 90 degrees about x)
     const push = (p, n, uv) => {
+      if (opts.rx) {
+        p = [p[0], y - (p[2] - z), z + (p[1] - y)];
+        n = [n[0], -n[2], n[1]];
+      }
       const wp = this._p(p[0], p[1], p[2]);
       const wn = this._n(n[0], n[1], n[2]);
       b.pos.push(wp[0], wp[1], wp[2]);

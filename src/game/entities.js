@@ -35,8 +35,9 @@ export class EntitySystem {
     this.events = events;
     const ctx = this.ctx();
     // hunters arrive on a schedule
+    // (only one at a time: a second one waits for its next window)
     for (const h of HUNTERS) {
-      if (this.states.some((s) => s.type === h.id)) continue;
+      if (this.states.some((s) => ENTITIES[s.type].role === 'hunter')) break;
       if (game.debugNoHunters) continue;
       if (h.schedule(game.worldSeed, game.tick) || game.forceHunter === h.id) {
         game.forceHunter = null;
@@ -77,6 +78,7 @@ export class EntitySystem {
     if (game.save.data.meetings[cell.key]) return;
     for (const r of RESIDENTS) {
       if (this.states.some((s) => s.type === r.id)) continue;
+      if (this.states.some((s) => s.cellKey === cell.key)) break; // one resident per place
       // also consider the neighbours that just streamed in, so he's there when you arrive
       if (r.appearsIn(game.worldSeed, cell)) {
         const s = r.spawn(this.ctx(), cell);
@@ -132,6 +134,8 @@ export class EntitySystem {
       const last = this.lightTick.get(s.id) || -1;
       if (game.tick - last >= 6 || !v.light) {
         v.light = [...game.world.lightAt(s.x, 1.2, s.z, this.light)];
+        const k = this.darkAt(s.x, s.z);
+        for (let c = 0; c < 3; c++) v.light[c] *= k;
         this.lightTick.set(s.id, game.tick);
       }
       v.update(s, alpha, v.light, t);
@@ -149,6 +153,20 @@ export class EntitySystem {
     const u = game.cam.uniforms;
     u.uTracking.value += (k * 0.9 - u.uTracking.value) * Math.min(1, dt * 3);
     u.uDistort.value += (k * k * 0.6 - u.uDistort.value) * Math.min(1, dt * 3);
+  }
+
+  /** Fraction of the environment light that survives at (x, z): hunters that put lights out. */
+  darkAt(x, z) {
+    let k = 1;
+    for (const s of this.states) {
+      const mod = ENTITIES[s.type];
+      if (mod.darkAt) k = Math.min(k, mod.darkAt(s, x, z));
+    }
+    return k;
+  }
+
+  isHunter(s) {
+    return ENTITIES[s.type]?.role === 'hunter';
   }
 
   clear() {

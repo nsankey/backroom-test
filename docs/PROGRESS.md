@@ -12,8 +12,8 @@ Phase 1 of docs/PLAN.md, following docs/PHASE1_PROMPT.md. Re-read before each st
 | 3. Entities | done: moments API, Night Porter (hunter), Waiting Guest (resident) |
 | 4. Player kit | done: flashlight, floor plan, logbook, discoveries, saves + codes |
 | 5. Lore | done: lore/fragments.json, one document per place, paper overlay |
-| 6. Deploy | next |
-| 7. Fill out to 8 / 2 / 2 | - |
+| 6. Deploy | done: GitHub Actions to Pages, https://nsankey.github.io/backroom-test/ |
+| 7. Fill out to 8 / 2 / 2 | done: 8 places, 2 hunters, 2 residents |
 
 ## How to run
 
@@ -27,8 +27,11 @@ Open http://localhost:5173. Useful URL flags: `?debug` (fps + cell readout), `?s
 In the console, `__game.debugView(x, z, yaw, pitch)` renders one frame from a spot (and freezes
 it in an overlay), `await __game.debugSave('name')` writes that frame to `shots/name.jpg` through
 a dev-server endpoint (a hidden browser pane can present stale frames, so trust the file), and
-`__game.benchmark(60)` returns GPU-synced ms per frame. `__game.forceHunter = 'porter'` brings a
-hunter on the next tick; `__game.debugNoHunters = true` keeps them away. Note yaw: `-PI/2` faces +x.
+`__game.benchmark(60)` returns GPU-synced ms per frame. `__game.forceHunter = 'porter'` (or
+`'unlit'`) brings a hunter on the next tick; `__game.debugNoHunters = true` keeps them away.
+`__game.debugRunFrames(60)` runs the frame loop as if unpaused (takes queued thumbnails).
+Note yaw: `-PI/2` faces +x. If an edit seems not to show up, the Vite watcher may have missed a
+rapid second write: touch the file.
 
 ## Architecture (decisions and why)
 
@@ -146,9 +149,62 @@ hunter on the next tick; `__game.debugNoHunters = true` keeps them away. Note ya
   and notes bodies over ~120 words.
 - Bug fixed: closing the paper with E also reached the game input and picked it up again.
 
+### Step 6
+- `.github/workflows/deploy.yml`: on push to main, `npm ci`, the determinism check (a failing
+  world blocks the deploy), `vite build` with `VITE_BASE=/<repo>/`, upload, deploy to Pages.
+- Verified the live build: title, play, map, logbook, lore paper, no console errors.
+
+### Step 7
+- **Places 6-8**:
+  - **The Starlight Ballroom** (parquet, flocked red walls, chandeliers, banquet rounds laid for a
+    welcome dinner, a lit bandstand with the band gone and muzak still playing from it; place
+    cards and a microphone that something taps back on).
+  - **Linen & Laundry** (block walls, coin-op washers and dryers, some still turning and warm,
+    folding tables, and the building's main panel: every breaker thrown, the meter still turning).
+  - **The Drafting Room** (tilted drawing boards under clamp lamps, walls papered with faded
+    plans that disagree, flat files, and Hale's private office in a mirrored corner).
+  - Each has a document: a dinner programme (volunteers), the 1979 power-company disconnect order
+    (the seal), Hale's last memo to Varga (his plans).
+- **Hunter 2: The Unlit.** A patch of hall where the lights have gone out (a shared `uDark`
+  uniform cuts baked light and tube glow per fragment inside a restless circle; only the
+  flashlight still reaches in). Inside stands a night attendant lit by nothing but your torch.
+  Telegraphed: tubes pop and die a few metres ahead of it, a low hush replaces the hum, places
+  nearby brown out, the tape warps. It drifts at 0.8 m/s, slower than walking. Counterplay is the
+  opposite of the porter's: hold the flashlight on it for 2.5 s and it withdraws; let it reach
+  you with the torch off or pointed away and you are checked out. First visit no earlier than
+  4 min, then a 40 % chance per 90 s window. Only one hunter visits at a time.
+- **Resident 2: The Maintenance Man.** Coveralls, cap, stepladder, a lit spare tube under his
+  arm; found in the guest wing, ballroom, laundry or ice room. Tells you how to drive off the
+  Unlit, then is gone when you look away. At most one resident per place.
+- Sim-tested: 149 ticks of torchlight sends the Unlit away; torch off, it catches from 5 m in
+  ~4.9 s and the check-out logs who did it.
+- Look passes (3 angles each, then again): troffers were being added in the ballroom because
+  `fillDarkGaps` didn't know about prop lights (now takes `extra` light positions); chandeliers
+  were spokes with a hot ceiling (hoop, two tiers, glass drops, light below the bulbs, warmer
+  plaster); the bandstand was black (footlights + curtain wash); banquet chair backs read as
+  cardboard (gilt frame + pad); drawing boards were flat white desks (tilted board on a steel
+  trestle, parallel rule, clamp lamp); pinned plans looked like screens (faded diazo prints and
+  pencil-on-vellum sheets, fold creases); washers were boxes with grey discs (chrome bezel, smoked
+  glass, hinge, console); the stepladder was assembled wrong.
+- Bug fixed: a queued place photo could fire after you had walked into the next place and
+  photograph the wrong room; queued photos now belong to their cell.
+- Perf (GPU-synced, 1024x576, worst of four directions): lobby 4.1 ms, guest wing 4.0, rooms
+  6.9, ice 4.0, sleep study 4.6, ballroom 3.6, laundry 3.1, drafting 3.0. All far inside 16.7 ms.
+- Determinism + connectivity + lore check passes for all 8 kinds (fingerprint ab704944).
+
 ## Known issues
 - Pointer lock is unavailable in the automation browser; screenshots use `debugView`.
 - Discovering a place costs one ~20-70 ms frame (vantage search + an extra render). Rare.
+- Figures are lit by a sampled colour, not the baked light, so they read slightly flat.
 
-## Next
-- Step 6: GitHub Pages deploy.
+## Improve next
+- Figures: skinned, animated bodies instead of primitives; real faces stay hidden.
+- Let the Unlit leave something behind: a place it lingered in stays dark on the floor plan
+  (fits ORIGIN: dark places become new rooms).
+- More moments per place, and residents that reference what you have read.
+- Footstep and room-tone variety per floor material; muzak that drifts between places.
+- Gamepad support and a settings toggle for the camcorder intensity.
+- Multiplayer: the sim is ready for it (seeded world, tick, action layer); add a relay at
+  `VITE_MP_URL` and sync player snapshots.
+
+**Live: https://nsankey.github.io/backroom-test/**

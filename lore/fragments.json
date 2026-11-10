@@ -46,6 +46,27 @@
       "body": "SUBJ  HRS SLEPT  REMARKS\n09    0          reports feeling rested. alert.\n10    0          reports feeling rested.\n11    0          asked which room he is in. room number given (Rm 240). there is no Rm 240 on the plan. refer D. Hale.\n12    0          'I can hear the building thinking.' calm.\n11    -          checked out. bed made. key returned to desk by [[         ]].\n\nTime of entry: --:--  (no reference available)",
       "sign": "Observer: E. Lindqvist, R.N.",
       "log": "An observation log from the sleep study. Nobody slept. Subject 11 asked about a room that was not on the plan, then checked out."
+    },
+    "ballroom": {
+      "thread": "volunteers",
+      "head": "THE STARLIGHT BALLROOM  -  WELCOME DINNER FOR OUR NEW GUESTS",
+      "body": "Tonight's Programme\n\n  Cocktails ............ --:--\n  Welcome, Dr. I. Varga\n  Dinner is served ..... --:--\n  Music by the Lodge Orchestra, until close\n\nGuests are asked to remain seated until their table is called.\n\nTable assignments are by arrival. Late arrivals will be seated as soon as a place is laid. A place will be laid. There is always a place.\n\nThe Orchestra regrets it cannot take requests. It plays the same programme each evening so that no guest need wonder what comes next.",
+      "sign": "Printed for the week of [[          ]]. Cards remain the property of the Lodge.",
+      "log": "A dinner programme from the ballroom. Every time on it is blank. A place will always be laid for late arrivals."
+    },
+    "laundry": {
+      "thread": "theSeal",
+      "head": "SOUTHERN VALLEY POWER CO.  -  SERVICE DISCONNECT ORDER  -  W.O. 79-0314",
+      "body": "Premises: Meridian Lodge, ridge road (no number)\nRequested by: Aster-Vale Fdn., legal dept.\n\n1. Main panel located, laundry level. All 40 breakers thrown to OFF.  -- done\n2. Service drop cut at pole.  -- done\n3. Meter sealed and tagged.  -- done\n4. Verify zero load.\n\nRemarks: meter disc still turning. Read 3 times. Load steady, same as before disconnect. Lights in building remain on. Could not find what they are wired to.\n\nCrew would not go back inside to check. [[             ]]. Recommend this be left as is.",
+      "sign": "Lineman: R. Okafor. Foreman's signature: (not signed)",
+      "log": "A disconnect order from the power company. Every breaker was thrown and the line was cut. The meter kept turning and the lights stayed on."
+    },
+    "draftingOffice": {
+      "thread": "halesPlans",
+      "head": "INTEROFFICE  -  TO: DR. I. VARGA  -  FROM: D. HALE, NIGHT ARCHITECT",
+      "body": "Ilse,\n\nYou asked for a current plan. I can't give you one. I measure a hall, come back to the board, and the hall I measured has already changed to match the drawing. So I drew a short one. In the morning it was short.\n\nI have stopped drawing doors. I have stopped drawing anything I would not want to walk into.\n\nI am no longer sure I am drawing what is there. I am beginning to think it is [[waiting to see what I draw]].\n\nPlease do not ask me for room 240 again. I never drew it.",
+      "sign": "- D.H.  (copy left on the board)",
+      "log": "A memo from Desmond Hale to Dr. Varga. He measured halls that changed to match his drawings, and stopped drawing doors."
     }
   }
 }

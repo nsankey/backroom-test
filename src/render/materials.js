@@ -54,6 +54,17 @@ const DEFS = {
   metalGrey: { color: 0x7c7f78 },
   vendingBody: { color: 0x8a2a20 },
   redPaint: { color: 0xa0201a },
+  parquet: { tex: 'parquet', scale: [1, 1] },
+  paintGrey: { tex: 'paintGrey', scale: [1.6, 1.6] },
+  flockRed: { tex: 'wallpaperOval', scale: [1, 1], color: 0xa85844 },
+  blueprint: { tex: 'blueprint', scale: [1, 1] },
+  planSheet: { tex: 'planSheet', scale: [1, 1] },
+  steelDark: { color: 0x3a3e3c },
+  velvet: { tex: 'fabricFloral', scale: [0.5, 0.5], color: 0x9a3a32 },
+  plasterWarm: { tex: 'paintCream', scale: [2, 2], color: 0xa89878 },
+  tablecloth: { tex: 'linen', scale: [1, 1], color: 0xe8e2d0 },
+  enamel: { color: 0xd6d4c8 },
+  draftBoard: { color: 0xc8c4ae },
   glass: { color: 0x10120f },
   // glow (emissive) surfaces: colour comes from the baked vertex colour
   lamp: { glow: true },
@@ -66,7 +77,7 @@ const DEFS = {
 };
 
 // textures whose UVs are explicit (uvRect) rather than metres
-const EXPLICIT_UV = new Set(['clockFace', 'digits', 'signs', 'signsGlow', 'vendingGlow', 'scope', 'tvStatic']);
+const EXPLICIT_UV = new Set(['clockFace', 'digits', 'signs', 'signsGlow', 'vendingGlow', 'scope', 'tvStatic', 'blueprint', 'planSheet']);
 
 export class MaterialLibrary {
   constructor(renderer) {
@@ -78,7 +89,8 @@ export class MaterialLibrary {
     this.worker.onmessage = (e) => this._onTexture(e.data);
     this.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
     // shared uniforms used by every material
-    this.shared = { uTime: { value: 0 } };
+    // uDark: a moving patch where the baked light goes out (x, z, radius, strength): the Unlit
+    this.shared = { uTime: { value: 0 }, uDark: { value: new THREE.Vector4(0, 0, 1, 0) } };
   }
 
   /** Request every texture up front; resolves when all are loaded. */
@@ -180,21 +192,42 @@ function injectBake(mat, shared, glow, cell = null) {
     shader.uniforms.uFlicker = uniforms.uFlicker;
     shader.uniforms.uDim = uniforms.uDim;
     shader.uniforms.uTime = shared.uTime;
+    shader.uniforms.uDark = shared.uDark;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nattribute vec3 bakeA;\nattribute vec3 bakeB;\nuniform float uFlicker;\nuniform float uDim;\nvarying vec3 vBake;',
+        '#include <common>\nattribute vec3 bakeA;\nattribute vec3 bakeB;\nuniform float uFlicker;\nuniform float uDim;\nvarying vec3 vBake;\nvarying vec3 vWPos;',
       )
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBake = (bakeA + bakeB * uFlicker) * uDim;');
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vBake;\nuniform float uTime;');
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvBake = (bakeA + bakeB * uFlicker) * uDim;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+      );
+    // the Unlit: baked light (and the glow of tubes) goes out inside a soft, restless circle;
+    // only the flashlight, which is a real light, still reaches in
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+      varying vec3 vBake;
+      varying vec3 vWPos;
+      uniform float uTime;
+      uniform vec4 uDark;
+      float darkK() {
+        if (uDark.w <= 0.0) return 1.0;
+        vec2 q = vWPos.xz - uDark.xy;
+        float d = length(q);
+        float a = atan(q.y, q.x);
+        float edge = uDark.z * (1.0 + 0.08 * sin(a * 5.0 + uTime * 1.7) + 0.05 * sin(a * 11.0 - uTime * 2.9));
+        float inside = 1.0 - smoothstep(edge * 0.6, edge, d);
+        return 1.0 - uDark.w * inside;
+      }`,
+    );
     if (glow) {
       shader.fragmentShader = shader.fragmentShader.replace(
         'vec4 diffuseColor = vec4( diffuse, opacity );',
         // a browned-out tube fades faster than the light it throws, and warms as it starves
-        'vec4 diffuseColor = vec4( diffuse * vBake * uDimG * vec3(1.0, 0.8 + 0.2 * uDimG, 0.55 + 0.45 * uDimG), opacity );',
+        'vec4 diffuseColor = vec4( diffuse * vBake * darkK() * uDimG * vec3(1.0, 0.8 + 0.2 * uDimG, 0.55 + 0.45 * uDimG), opacity );',
       );
-      shader.fragmentShader = shader.fragmentShader.replace('uniform float uTime;', 'uniform float uTime;\nuniform float uDimG;');
-      shader.uniforms.uDimG = uniforms.uDim;
+      shader.fragmentShader = shader.fragmentShader.replace('uniform float uTime;', 'uniform float uTime;\nuniform float uDimG;');      shader.uniforms.uDimG = uniforms.uDim;
       if (mat.userData.animate === 'static') {
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <map_fragment>',
@@ -213,7 +246,7 @@ function injectBake(mat, shared, glow, cell = null) {
     } else {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <lights_fragment_maps>',
-        '#include <lights_fragment_maps>\nirradiance += vBake * PI;',
+        '#include <lights_fragment_maps>\nirradiance += vBake * darkK() * PI;',
       );
     }
   };

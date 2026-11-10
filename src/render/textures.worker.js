@@ -56,6 +56,72 @@ function fibers(ctx, w, h, rng, count, light, dark) {
   }
 }
 
+/** A floor plan sheet: rooms off a corridor, a pencilled-in room that wasn't there, a title block. */
+function planSheet(rng, { bg, grid, ink, stain }) {
+  const [c, x] = canvas();
+  x.fillStyle = rgb(...bg);
+  x.fillRect(0, 0, S, S);
+  // uneven fading toward one edge, as if it hung by a window
+  const fade = x.createLinearGradient(0, 0, S, S * 0.3);
+  fade.addColorStop(0, 'rgba(255,255,240,0.14)');
+  fade.addColorStop(1, 'rgba(255,255,240,0)');
+  x.fillStyle = fade;
+  x.fillRect(0, 0, S, S);
+  x.strokeStyle = grid;
+  x.lineWidth = 1;
+  for (let k = 0; k < S; k += 16) {
+    x.beginPath();
+    x.moveTo(k, 0);
+    x.lineTo(k, S);
+    x.moveTo(0, k);
+    x.lineTo(S, k);
+    x.stroke();
+  }
+  // rooms off a corridor, drawn and redrawn
+  x.strokeStyle = ink(0.75);
+  x.lineWidth = 2;
+  const cy = rng.int(200, 300);
+  x.strokeRect(40, cy - 30, 430, 60);
+  for (let k = 0; k < 6; k++) {
+    const rx = 40 + k * 72;
+    const up = rng.int(90, 150);
+    x.strokeRect(rx, cy - 30 - up, 72, up);
+    x.strokeRect(rx, cy + 30, 72, rng.int(90, 160));
+    // door swings
+    x.beginPath();
+    x.arc(rx + 10, cy - 30, 14, -Math.PI / 2, 0);
+    x.stroke();
+    x.fillStyle = ink(0.55);
+    x.fillRect(rx + 24, cy - 80, 22, 2);
+    x.fillRect(rx + 24, cy + 80, 22, 2);
+  }
+  // a newer room pencilled in where there was nothing, and one rubbed out
+  x.strokeStyle = ink(0.4);
+  x.lineWidth = 1.5;
+  x.setLineDash([6, 5]);
+  x.strokeRect(rng.int(60, 300), rng.int(30, 70), rng.int(80, 140), rng.int(50, 90));
+  x.setLineDash([]);
+  x.fillStyle = rgb(...bg.map((v) => v * 1.05), 0.6);
+  x.fillRect(rng.int(60, 380), cy + 40, rng.int(40, 80), rng.int(30, 60));
+  // title block
+  x.strokeStyle = ink(0.6);
+  x.strokeRect(340, 430, 150, 60);
+  x.fillStyle = ink(0.5);
+  for (let k = 0; k < 4; k++) x.fillRect(350, 442 + k * 12, rng.int(60, 130), 2);
+  // fold creases
+  for (const f of [S / 3, (2 * S) / 3]) {
+    x.fillStyle = 'rgba(0,0,0,0.08)';
+    x.fillRect(f, 0, 2, S);
+    x.fillStyle = 'rgba(255,255,255,0.08)';
+    x.fillRect(f + 2, 0, 2, S);
+  }
+  x.fillStyle = 'rgba(0,0,0,0.07)';
+  x.fillRect(0, S / 2, S, 2);
+  blotches(x, S, S, rng, 6, stain, 40, 140, 0.22);
+  noise(x, S, S, rng, 0.07);
+  return c;
+}
+
 // ---- generators ---------------------------------------------------------------------------
 
 const GEN = {
@@ -288,6 +354,60 @@ const GEN = {
   paintMint(rng) {
     return paint(rng, [168, 192, 166], true);
   },
+  paintGrey(rng) {
+    return paint(rng, [176, 176, 164], true);
+  },
+
+  parquet(rng) {
+    // honey oak finger-block parquet: 4 x 4 squares per metre, alternating direction
+    const [c, x] = canvas();
+    const q = S / 4;
+    for (let i = 0; i < 4; i++)
+      for (let j = 0; j < 4; j++) {
+        const vert = (i + j) % 2 === 0;
+        for (let k = 0; k < 4; k++) {
+          const v = rng.float(0.8, 1.08);
+          x.fillStyle = rgb(150 * v, 102 * v, 56 * v);
+          if (vert) x.fillRect(i * q + k * (q / 4), j * q, q / 4, q);
+          else x.fillRect(i * q, j * q + k * (q / 4), q, q / 4);
+          // grain
+          for (let g = 0; g < 6; g++) {
+            x.strokeStyle = rgb(90, 56, 28, rng.float(0.08, 0.25));
+            x.lineWidth = rng.float(0.5, 1.4);
+            x.beginPath();
+            if (vert) {
+              const gx = i * q + k * (q / 4) + rng.float(2, q / 4 - 2);
+              x.moveTo(gx, j * q);
+              x.lineTo(gx + rng.float(-2, 2), j * q + q);
+            } else {
+              const gy = j * q + k * (q / 4) + rng.float(2, q / 4 - 2);
+              x.moveTo(i * q, gy);
+              x.lineTo(i * q + q, gy + rng.float(-2, 2));
+            }
+            x.stroke();
+          }
+          x.fillStyle = rgb(50, 30, 14, 0.55);
+          if (vert) x.fillRect(i * q + k * (q / 4), j * q, 1, q);
+          else x.fillRect(i * q, j * q + k * (q / 4), q, 1);
+        }
+      }
+    // the varnish has worn where people danced
+    blotches(x, S, S, rng, 10, 'rgba(200,170,120,A)', 40, 140, 0.12);
+    blotches(x, S, S, rng, 8, 'rgba(40,24,10,A)', 30, 90, 0.18);
+    noise(x, S, S, rng, 0.05);
+    return c;
+  },
+
+  blueprint(rng) {
+    // a sun-faded diazo print of a floor plan: washed Prussian blue, pale walls, fold creases
+    return planSheet(rng, { bg: [62, 92, 136], grid: 'rgba(200,220,255,0.07)', ink: (a) => rgb(220, 232, 250, a), stain: 'rgba(20,30,60,A)' });
+  },
+
+  planSheet(rng) {
+    // pencil and ink on yellowed vellum: the same kind of plan, drawn by hand
+    return planSheet(rng, { bg: [206, 198, 168], grid: 'rgba(90,110,120,0.08)', ink: (a) => rgb(48, 50, 58, a), stain: 'rgba(120,96,50,A)' });
+  },
+
   paintCream(rng) {
     return paint(rng, [212, 204, 178], false);
   },

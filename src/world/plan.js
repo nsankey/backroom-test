@@ -175,8 +175,10 @@ export class Plan {
    * light within `gap` metres (branch corridors carved by connectDoors, mostly). Deterministic
    * scan order; flicker comes from the caller's rng.
    */
-  fillDarkGaps(zones, { gap = 4, power = 0.7, rng = null, flickerChance = 0.2 } = {}) {
+  fillDarkGaps(zones, { gap = 4, power = 0.7, rng = null, flickerChance = 0.2, extra = [] } = {}) {
     const set = new Set(zones);
+    // `extra`: [x, z] of lights that props add (chandeliers, lamps), which plan.lights does not see
+    const known = [...this.lights.map((l) => [l.x, l.z]), ...extra];
     for (let j = 1; j < N - 1; j++)
       for (let i = 1; i < N - 1; i++) {
         const zi = this.tiles[this.idx(i, j)];
@@ -184,7 +186,7 @@ export class Plan {
         const x = (i + 0.5) * TILE;
         const z = (j + 0.5) * TILE;
         let near = false;
-        for (const l of this.lights) if ((l.x - x) ** 2 + (l.z - z) ** 2 < gap * gap) near = true;
+        for (const [lx, lz] of known) if ((lx - x) ** 2 + (lz - z) ** 2 < gap * gap) near = true;
         if (near) continue;
         // centre the fixture across a narrow corridor
         const wide = (di, dj) => {
@@ -198,6 +200,7 @@ export class Plan {
         const cx = alongX ? x : x + Math.max(-0.5, Math.min(0.5, ox));
         const cz = alongX ? z + Math.max(-0.5, Math.min(0.5, oz)) : z;
         this.troffer(cx, cz, { power, flicker: rng ? rng.chance(flickerChance) : false, rot: alongX ? 0 : Math.PI / 2 });
+        known.push([cx, cz]);
       }
   }
 

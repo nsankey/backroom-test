@@ -389,6 +389,223 @@ export const PROPS = {
     b.box('paper', -0.01, y + 0.012, 0.01, 0.21, 0.004, 0.28, { rot: 0.05 });
   },
 
+  // ---- ballroom ----
+
+  roundTable(b, p, rng) {
+    // a banquet round with a floor-length cloth, a brass centrepiece and chairs pulled up (or not)
+    const r = p.r || 0.75;
+    b.cyl('tablecloth', 0, 0.02, 0, r + 0.04, 0.74, { r1: r + 0.1, segs: 18, noCap: true });
+    b.cyl('tablecloth', 0, 0.74, 0, r + 0.04, 0.02, { segs: 18 });
+    b.cyl('brass', 0, 0.76, 0, 0.07, 0.02, { segs: 10 });
+    b.cyl('brass', 0, 0.78, 0, 0.012, 0.22, { segs: 6, noCap: true });
+    b.cyl('shade', 0, 0.98, 0, 0.035, 0.07, { r1: 0.045, segs: 8, glow: [1.0, 0.62, 0.3] });
+    b.light({ x: 0, y: 1.05, z: 0, color: [1.0, 0.7, 0.4], power: 0.28, range: 2.5 });
+    // place settings
+    const n = p.seats || 6;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const sx = Math.sin(a);
+      const sz = Math.cos(a);
+      b.cyl('ceramic', sx * (r - 0.2), 0.755, sz * (r - 0.2), 0.11, 0.012, { segs: 12 });
+      if (rng && rng.chance(0.4)) b.box('paperTag', sx * (r - 0.38), 0.765, sz * (r - 0.38), 0.07, 0.03, 0.02, { rot: a });
+      // gilt banquet chair, some pushed back, one or two knocked askew
+      const out = r + 0.28 + (rng ? rng.float(0, 0.25) : 0);
+      const skew = rng ? rng.float(-0.3, 0.3) : 0;
+      b.push(sx * out, sz * out, a + Math.PI + skew);
+      legs(b, 'brass', 0.42, 0.42, 0.45, 0.03, 0.012);
+      b.box('velvet', 0, 0.45, 0, 0.44, 0.06, 0.42);
+      // gilt frame back: two posts and a top rail around a velvet pad
+      for (const s of [-1, 1]) b.box('brass', s * 0.2, 0.5, -0.2, 0.025, 0.5, 0.025);
+      b.box('brass', 0, 0.96, -0.2, 0.42, 0.04, 0.03);
+      b.box('velvet', 0, 0.6, -0.2, 0.36, 0.32, 0.03);
+      b.pop();
+    }
+    b.collideBox(0, 0, (r + 0.5) * 2, (r + 0.5) * 2, 0.8);
+  },
+
+  chandelier(b, p) {
+    // a brass hoop of candle bulbs with hanging drops, warm and a little too bright
+    const ceil = p.ceil || 4;
+    const y = ceil - (p.drop || 1.1);
+    const R = p.R || 0.55;
+    const fl = !!p.flicker;
+    // chain and ceiling rose
+    b.cyl('brass', 0, ceil - 0.04, 0, 0.12, 0.04, { r1: 0.08, segs: 12 });
+    b.cyl('brass', 0, y + 0.3, 0, 0.012, ceil - y - 0.3, { segs: 5, noCap: true });
+    // central column: a turned brass stem with a bowl underneath
+    b.cyl('brass', 0, y - 0.05, 0, 0.05, 0.4, { r1: 0.03, segs: 10 });
+    b.cyl('brass', 0, y - 0.22, 0, 0.11, 0.17, { r1: 0.02, segs: 12 });
+    const tiers = p.tiers || 1;
+    for (let t = 0; t < tiers; t++) {
+      const r = t ? R * 0.55 : R;
+      const ty = y + t * 0.32;
+      const n = t ? 6 : 10;
+      // the hoop itself: short tangent bars around the ring
+      for (let k = 0; k < n * 2; k++) {
+        const a = ((k + 0.5) / (n * 2)) * Math.PI * 2;
+        b.box('brass', Math.sin(a) * r, ty, Math.cos(a) * r, (2 * Math.PI * r) / (n * 2) + 0.02, 0.025, 0.025, { rot: a });
+      }
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        const x = Math.sin(a) * r;
+        const z = Math.cos(a) * r;
+        b.box('brass', x / 2, ty - 0.02, z / 2, 0.015, 0.015, r, { rot: a });
+        b.cyl('brass', x, ty + 0.02, z, 0.045, 0.02, { segs: 8 });
+        b.cyl('enamel', x, ty + 0.04, z, 0.016, 0.11, { segs: 6 });
+        b.cyl('lamp', x, ty + 0.15, z, 0.03, 0.07, { r1: 0.008, segs: 6, glow: [2.4, 1.6, 0.85], flicker: fl });
+        // strings of glass drops hanging off the hoop
+        for (let d = 0; d < 3; d++) b.box('chrome', Math.sin(a + 0.3) * r, ty - 0.07 - d * 0.07, Math.cos(a + 0.3) * r, 0.025, 0.05, 0.025, { rot: a });
+      }
+    }
+    // the bulbs shade the ceiling a little: light sits under the hoop
+    b.light({ x: 0, y: y - 0.25, z: 0, color: [1.0, 0.76, 0.48], power: p.power ?? 2.2, range: 9, flicker: fl });
+  },
+
+  stage(b, p) {
+    // a low bandstand with a velvet backdrop, an empty music stand and a microphone
+    const w = p.w || 4;
+    const d = p.d || 2.2;
+    b.box('walnut', 0, 0, 0, w, 0.45, d, { seg: 0.5 });
+    b.box('parquet', 0, 0.45, 0, w, 0.005, d, { seg: 0.5 });
+    b.box('velvet', 0, 0.45, -d / 2 + 0.05, w, 2.6, 0.08, { seg: 0.6 });
+    b.cyl('chrome', 0.3, 0.45, 0.4, 0.012, 1.45, { segs: 6, noCap: true });
+    b.cyl('blackPlastic', 0.3, 1.9, 0.4, 0.025, 0.08, { segs: 8 });
+    b.cyl('chrome', 0.3, 0.45, 0.4, 0.13, 0.015, { segs: 10 });
+    for (const sx of [-1.2, -0.6, 0.9]) {
+      b.cyl('chrome', sx, 0.45, -0.2, 0.01, 0.95, { segs: 5, noCap: true });
+      b.box('blackPlastic', sx, 1.35, -0.18, 0.4, 0.28, 0.02, { rot: 0 });
+    }
+    b.box('walnut', 0, 0, d / 2 + 0.2, 1.0, 0.22, 0.4);
+    // footlights along the lip and a warm wash on the curtain
+    b.box('brass', 0, 0.44, d / 2 - 0.06, w - 0.2, 0.04, 0.08);
+    for (let x = -w / 2 + 0.35; x < w / 2 - 0.2; x += 0.5) b.box('lamp', x, 0.48, d / 2 - 0.06, 0.1, 0.025, 0.04, { glow: [2.0, 1.3, 0.7] });
+    b.light({ x: 0, y: 0.7, z: d / 2 - 0.3, color: [1.0, 0.72, 0.45], power: 0.9, range: 4.5 });
+    b.light({ x: 0, y: 2.6, z: 0.2, color: [1.0, 0.78, 0.55], power: 1.1, range: 5 });
+    b.collideBox(0, 0, w, d + 0.4, 0.45);
+  },
+
+  // ---- laundry ----
+
+  washer(b, p) {
+    // a coin-op front loader (or a dryer: p.dryer), enamel, chrome porthole
+    b.box('blackPlastic', 0, 0, 0.02, 0.62, 0.07, 0.6);
+    b.box('enamel', 0, 0.07, 0, 0.68, 0.85, 0.66, { seg: 0.35 });
+    b.box('metalGrey', 0, 0.918, 0, 0.69, 0.008, 0.67);
+    // console: coin slide, a dial, a slot of a display
+    b.box('enamel', 0, 0.92, -0.25, 0.68, 0.16, 0.16);
+    b.box('steelDark', -0.13, 0.98, -0.168, 0.28, 0.07, 0.006);
+    b.box('chrome', 0.18, 0.96, -0.172, 0.14, 0.09, 0.016);
+    b.cyl('blackPlastic', 0.04, 1.01, -0.17, 0.025, 0.02, { segs: 8, rx: true });
+    // porthole: chrome bezel, smoked glass, a hinge and a handle
+    b.cyl('chrome', 0, 0.5, 0.33, 0.215, 0.03, { segs: 18, rx: true });
+    const lit = p.dryer && p.on;
+    b.cyl(lit ? 'lamp' : 'glass', 0, 0.5, 0.36, 0.165, 0.008, lit ? { segs: 16, rx: true, glow: [0.85, 0.58, 0.3] } : { segs: 16, rx: true });
+    b.box('chrome', -0.215, 0.42, 0.33, 0.03, 0.16, 0.025);
+    b.box('chrome', 0.215, 0.47, 0.33, 0.03, 0.06, 0.035);
+    if (lit) b.light({ x: 0, y: 0.5, z: 0.6, color: [1.0, 0.7, 0.4], power: 0.18, range: 2 });
+    b.collideBox(0, 0, 0.7, 0.68, 1.06);
+  },
+
+  foldingTable(b, p, rng) {
+    const w = p.w || 1.8;
+    legs(b, 'chrome', w, 0.75, 0.86, 0.06, 0.016);
+    b.box('laminate', 0, 0.86, 0, w, 0.03, 0.75);
+    // folded linen in stacks
+    let x = -w / 2 + 0.2;
+    while (x < w / 2 - 0.25) {
+      const n = rng ? rng.int(2, 7) : 4;
+      for (let k = 0; k < n; k++) b.box('linen', x + (rng ? rng.float(-0.01, 0.01) : 0), 0.89 + k * 0.05, rng ? rng.float(-0.1, 0.1) : 0, 0.34, 0.045, 0.3, { rot: rng ? rng.float(-0.05, 0.05) : 0 });
+      x += 0.42;
+    }
+    b.collideBox(0, 0, w, 0.75, 0.9);
+  },
+
+  breakerPanel(b, p) {
+    // wall-mounted main panel, every breaker thrown; and beside it the meter. Origin on the wall.
+    const y = 1.0;
+    b.box('metalGrey', 0, y, 0.06, 0.62, 1.0, 0.12, { seg: 0.35 });
+    b.box('metalGrey', 0, y + 0.02, 0.122, 0.56, 0.94, 0.006);
+    for (let k = 0; k < 20; k++)
+      for (const sx of [-0.12, 0.12]) {
+        b.box('blackPlastic', sx, y + 0.1 + k * 0.042, 0.13, 0.11, 0.028, 0.014);
+        b.box('blackPlastic', sx + 0.04, y + 0.1 + k * 0.042, 0.142, 0.022, 0.016, 0.022, { rot: 0 });
+      }
+    b.box('paperTag', 0, y + 0.93, 0.13, 0.4, 0.05, 0.004);
+    // the meter: a glass dome over a disc, and a red tag hung on it
+    b.box('metalGrey', 0.62, y + 0.55, 0.05, 0.3, 0.42, 0.1);
+    b.cyl('glass', 0.62, y + 0.76, 0.1, 0.12, 0.1, { segs: 14, rx: true });
+    b.box('chrome', 0.62, y + 0.73, 0.16, 0.16, 0.008, 0.004);
+    b.box('redPaint', 0.62, y + 0.42, 0.11, 0.08, 0.12, 0.004);
+    // conduit up to the ceiling
+    b.cyl('metalGrey', -0.2, y + 1.0, 0.05, 0.03, 2, { segs: 6, noCap: true });
+    b.cyl('metalGrey', 0.2, y + 1.0, 0.05, 0.03, 2, { segs: 6, noCap: true });
+  },
+
+  // ---- drafting room ----
+
+  draftingTable(b, p, rng) {
+    // a tilted drawing board on a steel stand with a plan taped to it and a clamp-arm lamp
+    // steel trestle: a post and a foot each side, a stretcher between
+    for (const sx of [-0.55, 0.55]) {
+      b.box('steelDark', sx, 0, 0, 0.05, 0.02, 0.66);
+      b.box('steelDark', sx, 0.02, -0.05, 0.045, 0.9, 0.045);
+      b.box('steelDark', sx, 0.86, -0.05, 0.05, 0.05, 0.5);
+    }
+    b.box('steelDark', 0, 0.22, -0.05, 1.1, 0.04, 0.035);
+    // the board, tilted toward the draftsman (front edge low, at +z)
+    const t = 0.28;
+    const D = 0.9;
+    const W = 1.3;
+    const yF = 0.86;
+    const ct = Math.cos(t);
+    const st = Math.sin(t);
+    const o = [-W / 2, yF, D / 2];
+    const v = [0, D * st, -D * ct];
+    b.face('draftBoard', o, [W, 0, 0], v, [0, 0], { seg: 0.7 });
+    b.face('steelDark', [o[0], o[1] - 0.025, o[2]], v, [W, 0, 0], [0, 0], { seg: 0.7 });
+    b.box('draftBoard', 0, yF - 0.025, D / 2 - 0.01, W, 0.028, 0.02);
+    const n = [0, ct, st];
+    const sheet = rng && rng.chance(0.5) ? 'planSheet' : 'blueprint';
+    const sv0 = 0.14; // sheet starts this far up the board
+    const so = [-0.42, yF + st * sv0 + n[1] * 0.004, D / 2 - ct * sv0 + n[2] * 0.004];
+    b.face(sheet, so, [0.84, 0, 0], [0, st * 0.6, -ct * 0.6], [0, 0], { seg: 1, uvRect: rng ? [rng.float(0, 0.3), rng.float(0, 0.3), 0.7, 0.7] : [0, 0, 1, 1] });
+    // parallel rule across the board, and a pencil
+    const ry = yF + st * 0.5 + 0.012;
+    b.box('chrome', 0, ry, D / 2 - ct * 0.5, 1.22, 0.012, 0.035);
+    b.box('shade', 0.2, yF + st * 0.2 + 0.01, D / 2 - ct * 0.2, 0.16, 0.008, 0.008, { rot: 0.5 });
+    // lamp on a clamp arm from the back corner
+    b.cyl('chrome', 0.6, yF + D * st, -D / 2 * ct, 0.012, 0.45, { segs: 5, noCap: true });
+    b.box('chrome', 0.52, yF + D * st + 0.43, -0.2, 0.015, 0.015, 0.5);
+    b.cyl('shade', 0.45, 1.5, 0.02, 0.09, 0.13, { r1: 0.04, segs: 10, glow: [0.95, 0.85, 0.6], noCap: true });
+    b.light({ x: 0.35, y: 1.42, z: 0.1, type: 'spotDown', color: [1.0, 0.9, 0.7], power: p.power ?? 0.9, range: 3 });
+    b.collideBox(0, 0, 1.35, 0.95, 1.1);
+  },
+
+  flatFile(b, p, rng) {
+    const w = p.w || 1.3;
+    b.box('metalGrey', 0, 0, 0, w, 0.9, 0.9, { seg: 0.4 });
+    for (let k = 0; k < 8; k++) b.box('chrome', 0, 0.12 + k * 0.1, 0.452, 0.22, 0.012, 0.01);
+    // rolled plans on top
+    const n = rng ? rng.int(2, 6) : 3;
+    for (let k = 0; k < n; k++) {
+      b.push(rng ? rng.float(-w / 2 + 0.2, w / 2 - 0.2) : 0, rng ? rng.float(-0.25, 0.25) : 0, Math.PI / 2 + (rng ? rng.float(-0.3, 0.3) : 0), 0.95);
+      b.cyl(rng && rng.chance(0.4) ? 'blueprint' : 'paper', 0, 0.04, -0.4, 0.04, 0.8, { segs: 8, rx: true });
+      b.pop();
+    }
+    b.collideBox(0, 0, w, 0.9, 0.95);
+  },
+
+  pinnedPlan(b, p, rng) {
+    // a floor plan pinned to the wall, origin on the wall
+    const w = p.w || 0.9;
+    const h = p.h || 0.65;
+    const y = p.y || 1.2;
+    const sheet = p.sheet || (rng && rng.chance(0.45) ? 'planSheet' : 'blueprint');
+    const dz = 0.006 + (p.layer || 0) * 0.005;
+    b.face(sheet, [-w / 2, y, dz], [w, 0, 0], [0, h, 0], [0, 0], { seg: 1, uvRect: rng ? [rng.float(0, 0.2), rng.float(0, 0.2), 0.8, 0.8] : [0, 0, 1, 1] });
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.box('redPaint', (sx * w) / 2.15, y + h / 2 + (sy * h) / 2.15, dz + 0.004, 0.012, 0.012, 0.01);
+  },
+
   cardboardBox(b, p, rng) {
     const s = p.s || 0.45;
     b.box('cardboard', 0, 0, 0, s, s * 0.8, s * 1.1);

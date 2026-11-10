@@ -12,6 +12,9 @@ import guestCorridor from './guestCorridor.js';
 import guestRooms from './guestRooms.js';
 import iceVending from './iceVending.js';
 import sleepLab from './sleepLab.js';
+import ballroom from './ballroom.js';
+import laundry from './laundry.js';
+import draftingOffice from './draftingOffice.js';
 
-export const KIND_LIST = [lobby, guestCorridor, guestRooms, iceVending, sleepLab];
+export const KIND_LIST = [lobby, guestCorridor, guestRooms, iceVending, sleepLab, ballroom, laundry, draftingOffice];
 export const KINDS = Object.fromEntries(KIND_LIST.map((k) => [k.id, k]));
