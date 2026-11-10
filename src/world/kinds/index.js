@@ -8,6 +8,10 @@
 // Kinds must be pure: no three.js, no DOM, no Math.random().
 
 import lobby from './lobby.js';
+import guestCorridor from './guestCorridor.js';
+import guestRooms from './guestRooms.js';
+import iceVending from './iceVending.js';
+import sleepLab from './sleepLab.js';
 
-export const KIND_LIST = [lobby];
+export const KIND_LIST = [lobby, guestCorridor, guestRooms, iceVending, sleepLab];
 export const KINDS = Object.fromEntries(KIND_LIST.map((k) => [k.id, k]));

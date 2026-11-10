@@ -2,7 +2,7 @@
 // Coordinates: tile (i, j), i along +x, j along +z. Metres are cell-local (0..16).
 
 import { N, TILE, DIRS, DOOR_HEIGHT, INNER_DOOR_HEIGHT } from './constants.js';
-import { doorTiles, doorInside } from './grid.js';
+import { doorTiles, doorInside } from './doors.js';
 
 export class Plan {
   constructor({ seed, cx, cz, doors, kindId }) {

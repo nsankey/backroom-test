@@ -129,7 +129,7 @@ export const PROPS = {
     const y = p.y || 0;
     b.cyl('brass', 0, y, 0, 0.08, 0.02, { segs: 10 });
     b.cyl('brass', 0, y + 0.02, 0, 0.012, 0.32, { segs: 6, noCap: true });
-    b.cyl('shade', 0, y + 0.3, 0, 0.17, 0.2, { r1: 0.11, segs: 12, noCap: true, glow: [1.1, 0.72, 0.38] });
+    b.cyl('shade', 0, y + 0.3, 0, 0.17, 0.2, { r1: 0.11, segs: 12, noCap: true, glow: [0.8, 0.52, 0.28] });
     b.light({ x: 0, y: y + 0.42, z: 0, color: [1.0, 0.72, 0.42], power: p.power ?? 0.9, range: 5 });
   },
 
@@ -147,7 +147,7 @@ export const PROPS = {
   sconce(b, p) {
     const y = p.y || 1.8;
     b.box('brass', 0, y - 0.12, 0.01, 0.1, 0.24, 0.02);
-    b.cyl('shade', 0, y - 0.05, 0.11, 0.08, 0.16, { r1: 0.1, segs: 10, glow: [1.2, 0.78, 0.42], flicker: !!p.flicker });
+    b.cyl('shade', 0, y - 0.05, 0.11, 0.08, 0.16, { r1: 0.1, segs: 10, glow: [0.75, 0.5, 0.28], flicker: !!p.flicker, noCap: true });
     b.light({ x: 0, y: y + 0.05, z: 0.2, color: [1.0, 0.7, 0.4], power: p.power ?? 0.7, range: 5, flicker: !!p.flicker });
   },
 
@@ -273,7 +273,10 @@ export const PROPS = {
     b.box('doorFrame', 0, y + h, 0.02, w + 0.12, 0.06, 0.04);
     b.box('doorFrame', -w / 2 - 0.03, y, 0.02, 0.06, h, 0.04);
     b.box('doorFrame', w / 2 + 0.03, y, 0.02, 0.06, h, 0.04);
-    b.face('blinds', [-w / 2, y, 0.01], [w, 0, 0], [0, h, 0], [0, 0], { glow: [1.25, 1.3, 1.2], seg: 0.5, uvScale: 1 });
+    b.face('blinds', [-w / 2, y, 0.01], [w, 0, 0], [0, h, 0], [0, 0], { glow: [0.62, 0.66, 0.58], seg: 0.5, uvScale: 1 });
+    // the pull cord and bottom rail
+    b.box('doorFrame', 0, y + 0.02, 0.025, w, 0.03, 0.02);
+    b.box('linen', w / 2 - 0.12, y + 0.1, 0.03, 0.006, h - 0.15, 0.006);
     b.light({ x: 0, y: y + h / 2, z: 0.35, color: [0.92, 0.95, 0.88], power: (p.power ?? 1) * 1.2, range: 6 });
   },
 

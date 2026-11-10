@@ -429,6 +429,16 @@ const SOUNDS = {
     noiseBurst(ae, out, t + 0.05, { freq: 2200, q: 3, peak: 0.08, d: 0.06 });
   },
   hvac() {},
+  knockFar(ae, out, t) {
+    SOUNDS.knock(ae, out, t);
+  },
+  tvStaticBurst(ae, out, t) {
+    noiseBurst(ae, out, t, { freq: 3200, q: 0.5, peak: 0.1, a: 0.05, d: 1.4 });
+  },
+  scopeBeep(ae, out, t) {
+    tone(ae, out, t, 1046, 'sine', 0.05, 0.005, 0.18);
+    tone(ae, out, t + 1.1, 1046, 'sine', 0.05, 0.005, 0.18);
+  },
   cartRattle(ae, out, t) {
     for (let k = 0; k < 5; k++) noiseBurst(ae, out, t + k * 0.09 + ae.rng.float(0, 0.03), { freq: ae.rng.float(1800, 4200), q: 6, peak: 0.08, d: 0.05 });
   },

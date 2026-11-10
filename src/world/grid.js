@@ -3,7 +3,7 @@
 // shares a seed builds the same world without talking to anyone.
 
 import { hash, hashFloat } from '../core/rng.js';
-import { N, DOOR_TILES } from './constants.js';
+import { DOOR_TILES } from './constants.js';
 import { KINDS, KIND_LIST } from './kinds/index.js';
 
 const EXTRA_DOOR_CHANCE = 0.38;
@@ -69,23 +69,4 @@ export function cellKind(seed, cx, cz) {
   return KINDS[cellKindId(seed, cx, cz)];
 }
 
-/** Tile coordinates of the doorway tiles on an edge, as [i, j] pairs. */
-export function doorTiles(dir, door) {
-  const out = [];
-  for (let s = door.start; s <= door.end; s++) {
-    if (dir === 'N') out.push([s, 0]);
-    if (dir === 'S') out.push([s, N - 1]);
-    if (dir === 'W') out.push([0, s]);
-    if (dir === 'E') out.push([N - 1, s]);
-  }
-  return out;
-}
-
-/** The tile just inside a door, where a corridor should connect to. */
-export function doorInside(dir, door) {
-  const m = Math.round(door.mid);
-  if (dir === 'N') return [m, 1];
-  if (dir === 'S') return [m, N - 2];
-  if (dir === 'W') return [1, m];
-  return [N - 2, m];
-}
+export { doorTiles, doorInside } from './doors.js';

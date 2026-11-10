@@ -2,6 +2,7 @@
 
 import { N, TILE, CELL, DIRS } from './constants.js';
 import { wallRot } from './props.js';
+import { doorInside } from './doors.js';
 
 const IN = TILE; // inner wall surfaces sit one tile in from the cell edge
 const OUT = CELL - TILE;
@@ -53,19 +54,126 @@ export function firstDoor(plan) {
   return null;
 }
 
+/**
+ * Make sure there is open floor just inside a door: carve a small vestibule (only through solid
+ * tiles) using the zone found just inside it.
+ */
+export function vestibule(plan, dir, depth = 3, half = 1.75) {
+  const door = plan.doors[dir];
+  if (!door) return;
+  const mid = (door.mid + 0.5) * TILE;
+  let [ii, jj] = doorInside(dir, door);
+  let zone = plan.tiles[plan.idx(ii, jj)];
+  if (!zone || plan.zones[zone].door) zone = plan.fallbackZone();
+  let x0, z0, x1, z1;
+  if (dir === 'N') [x0, x1, z0, z1] = [mid - half, mid + half, IN, IN + depth];
+  else if (dir === 'S') [x0, x1, z0, z1] = [mid - half, mid + half, OUT - depth, OUT];
+  else if (dir === 'W') [x0, x1, z0, z1] = [IN, IN + depth, mid - half, mid + half];
+  else [x0, x1, z0, z1] = [OUT - depth, OUT, mid - half, mid + half];
+  for (let j = Math.floor(z0 / TILE); j < Math.ceil(z1 / TILE); j++)
+    for (let i = Math.floor(x0 / TILE); i < Math.ceil(x1 / TILE); i++)
+      if (i >= 1 && j >= 1 && i <= N - 2 && j <= N - 2 && plan.tiles[plan.idx(i, j)] === 0) plan.tiles[plan.idx(i, j)] = zone;
+}
+
+function clearAround(plan, x, z, r) {
+  for (let j = Math.floor((z - r) / TILE); j <= Math.floor((z + r) / TILE); j++)
+    for (let i = Math.floor((x - r) / TILE); i <= Math.floor((x + r) / TILE); i++) {
+      if (!plan.isFloor(i, j) || plan.zoneAt(i, j).door) return false;
+    }
+  return true;
+}
+
 /** Place the lore document just inside the first door, nudged off the walking line. */
 export function placeLore(plan, { depth = 1.6, lateral = 1.1, onSurface = null } = {}) {
   const d = firstDoor(plan);
   if (!d) return;
-  let p = insideDoor(d, plan.doors[d], depth, lateral);
-  const ti = Math.floor(p.x / TILE);
-  const tj = Math.floor(p.z / TILE);
-  if (!plan.isFloor(ti, tj) || plan.zoneAt(ti, tj).door) p = insideDoor(d, plan.doors[d], depth, -lateral);
+  if (!onSurface) vestibule(plan, d);
+  let p = null;
+  for (const dep of [depth, depth + 0.8, depth + 1.6])
+    for (const lat of [lateral, -lateral]) {
+      if (p) break;
+      const c = insideDoor(d, plan.doors[d], dep, lat);
+      if (onSurface || clearAround(plan, c.x, c.z, 0.45)) p = c;
+    }
+  if (!p) p = insideDoor(d, plan.doors[d], depth, lateral);
   if (onSurface) {
     plan.prop('loreDoc', p.x, p.z, p.rot, { onSurface: true, y: onSurface });
   } else plan.prop('loreDoc', p.x, p.z, p.rot);
   plan.point('lore', p.x, p.z, { y: (onSurface || 0.74) + 0.02, dir: d });
   plan.interactions.push({ type: 'readLore', x: p.x, y: (onSurface || 0.74) + 0.05, z: p.z, radius: 1.6, prompt: 'Read' });
+}
+
+/** Pick a corridor axis that suits the doors: 'x' (east-west) or 'z' (north-south). */
+export function mainAxis(plan, rng) {
+  const ew = !!(plan.doors.E || plan.doors.W);
+  const ns = !!(plan.doors.N || plan.doors.S);
+  if (ew && !ns) return 'x';
+  if (ns && !ew) return 'z';
+  return rng.chance(0.5) ? 'x' : 'z';
+}
+
+/**
+ * Axis frame: work in (along, across) metres / tiles and map to cell coordinates.
+ * 'lo' is the wall at the smaller across value, facing +across.
+ */
+export function axisFrame(axis) {
+  const X = axis === 'x';
+  return {
+    axis,
+    pt: (along, across) => (X ? { x: along, z: across } : { x: across, z: along }),
+    tile: (a, c) => (X ? [a, c] : [c, a]),
+    rotLo: X ? 0 : Math.PI / 2, // facing +across
+    rotHi: X ? Math.PI : -Math.PI / 2, // facing -across
+    rotFwd: X ? Math.PI / 2 : 0, // facing +along
+    rotBack: X ? -Math.PI / 2 : Math.PI, // facing -along
+    fill: (plan, a0, c0, a1, c1, zone) => (X ? plan.fill(a0, c0, a1, c1, zone) : plan.fill(c0, a0, c1, a1, zone)),
+  };
+}
+
+/**
+ * Candidate spots for wall-mounted things along both walls of a straight corridor occupying
+ * across tiles c0..c1. A slot needs open corridor in front and `depth` solid tiles behind.
+ * Returns [{ along, side: 'lo'|'hi', x, z, rot }].
+ */
+export function corridorWallSlots(plan, frame, c0, c1, { width = 1.0, depth = 2, from = 1.2, to = CELL - 1.2 } = {}) {
+  const out = [];
+  for (let a = from; a <= to + 1e-6; a += TILE) {
+    const t0 = Math.floor((a - width / 2) / TILE);
+    const t1 = Math.floor((a + width / 2 - 0.001) / TILE);
+    for (const side of ['lo', 'hi']) {
+      let ok = true;
+      for (let t = t0; t <= t1 && ok; t++) {
+        const front = side === 'lo' ? c0 : c1;
+        const [fi, fj] = frame.tile(t, front);
+        if (!plan.isFloor(fi, fj) || plan.zoneAt(fi, fj).door) ok = false;
+        for (let k = 1; k <= depth && ok; k++) {
+          const [bi, bj] = frame.tile(t, side === 'lo' ? c0 - k : c1 + k);
+          if (plan.isFloor(bi, bj)) ok = false;
+        }
+      }
+      if (!ok) continue;
+      const across = side === 'lo' ? c0 * TILE : (c1 + 1) * TILE;
+      const p = frame.pt(a, across);
+      out.push({ along: a, side, x: p.x, z: p.z, rot: side === 'lo' ? frame.rotLo : frame.rotHi });
+    }
+  }
+  return out;
+}
+
+/** Greedily pick slots at least `gap` apart per side. */
+export function spaced(slots, gap, rng = null, skip = 0) {
+  const last = { lo: -Infinity, hi: -Infinity };
+  const out = [];
+  for (const s of slots) {
+    if (s.along - last[s.side] < gap) continue;
+    if (rng && skip && rng.chance(skip)) {
+      last[s.side] = s.along - gap * 0.5;
+      continue;
+    }
+    out.push(s);
+    last[s.side] = s.along;
+  }
+  return out;
 }
 
 /** Tile rect -> metre rect helpers. */

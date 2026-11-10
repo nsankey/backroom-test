@@ -255,8 +255,8 @@ const GEN = {
 
   vinylCheck(rng) {
     const [c, x] = canvas();
-    const a = [210, 200, 170];
-    const b = [120, 82, 52];
+    const a = [184, 176, 150];
+    const b = [126, 98, 72];
     for (let i = 0; i < 4; i++)
       for (let j = 0; j < 4; j++) {
         const col = (i + j) % 2 ? a : b;
@@ -269,8 +269,19 @@ const GEN = {
       x.fillRect(k * 128 - 1, 0, 2, S);
       x.fillRect(0, k * 128 - 1, S, 2);
     }
-    blotches(x, S, S, rng, 8, 'rgba(70,60,40,A)', 30, 110, 0.15);
-    noise(x, S, S, rng, 0.05);
+    blotches(x, S, S, rng, 14, 'rgba(70,60,40,A)', 30, 130, 0.22);
+    // scuffs
+    for (let k = 0; k < 40; k++) {
+      x.strokeStyle = rgb(40, 34, 28, rng.float(0.05, 0.2));
+      x.lineWidth = rng.float(1, 3);
+      const sx = rng.float(0, S);
+      const sy = rng.float(0, S);
+      x.beginPath();
+      x.moveTo(sx, sy);
+      x.lineTo(sx + rng.float(-40, 40), sy + rng.float(-10, 10));
+      x.stroke();
+    }
+    noise(x, S, S, rng, 0.06);
     return c;
   },
 

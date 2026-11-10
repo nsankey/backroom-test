@@ -19,6 +19,7 @@ import { CELL } from '../world/constants.js';
 import { createPlayer, applyLook, stepPlayer } from './player.js';
 import { flickerLevel } from './flicker.js';
 import { Moments } from './moments.js';
+import { Ambience } from './ambience.js';
 import { TICK, TICK_HZ } from './constants.js';
 
 export class Game {
@@ -59,6 +60,7 @@ export class Game {
     this.input = new Input(canvas);
     this.audio = new AudioEngine();
     this.moments = new Moments(this);
+    this.listeners.add(new Ambience(this));
 
     // post: render -> bloom -> tonemap/sRGB -> camcorder
     const composer = (this.composer = new EffectComposer(renderer));
@@ -111,7 +113,7 @@ export class Game {
     }
     if (px === undefined) {
       const cell = this.world.cells.get('0,0');
-      const sp = cell.points.spawn || { x: 8, z: 8 };
+      const sp = this.findOpenSpot(cell, cell.points.spawn || cell.points.resident || { x: 8, z: 8 });
       px = sp.x;
       pz = sp.z;
       const desk = cell.points.desk;
@@ -124,6 +126,23 @@ export class Game {
     this.renderer.compile(this.scene, this.camera);
     for (let k = 0; k < 6; k++) this.world.update(50);
     this.ensureLoop();
+  }
+
+  /** Nearest walkable spot to a cell-local point, in world coordinates. */
+  findOpenSpot(cell, p) {
+    const ok = (x, z) => {
+      for (const [dx, dz] of [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]]) if (!this.world.isWalkable(x + dx, z + dz)) return false;
+      return true;
+    };
+    const bx = cell.ox + p.x;
+    const bz = cell.oz + p.z;
+    for (let r = 0; r < 8; r += 0.25)
+      for (let a = 0; a < 16; a++) {
+        const x = bx + Math.cos((a / 16) * Math.PI * 2) * r;
+        const z = bz + Math.sin((a / 16) * Math.PI * 2) * r;
+        if (ok(x, z)) return { x, z };
+      }
+    return { x: bx, z: bz };
   }
 
   ensureLoop() {

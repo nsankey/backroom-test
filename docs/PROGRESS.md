@@ -8,8 +8,8 @@ Phase 1 of docs/PLAN.md, following docs/PHASE1_PROMPT.md. Re-read before each st
 | --- | --- |
 | 0. Setup (git, repo, ORIGIN, STYLE, test render) | done locally; GitHub repo waits on `gh auth login` |
 | 1. Engine and feel | done (see below) |
-| 2. Room format and generator | next |
-| 3. Entities | - |
+| 2. Room format and generator | done: 5 places, determinism check passes |
+| 3. Entities | next |
 | 4. Player kit | - |
 | 5. Lore | - |
 | 6. Deploy | - |
@@ -72,6 +72,21 @@ In the console, `__game.debugView(x, z, yaw, pitch)` renders one frame from a sp
 - Look passes: removed bloom haze (bloom was turning the ceiling to fog), darkened the ceiling
   bounce, added contact shadows and tubular chair arms, pendants over the desk.
 - Perf: ~4 ms/frame at 1228x921 on the dev machine (GPU-synced benchmark), 1 cell ~6k tris.
+
+### Step 2
+- Kind contract in `src/world/kinds/index.js`; kinds: lobby, guestCorridor (The Guest Wing),
+  guestRooms (Occupied Rooms), iceVending (Ice & Vending), sleepLab (The Sleep Study).
+- Shared layout kit: axis frames, corridor wall slots, vestibules inside doors, lore placement.
+- `npm run check:determinism` (tools/check-determinism.mjs) generates 120 cells per kind in Node:
+  every boundary door must be reachable around props, and the same (seed, cell) must produce
+  identical geometry, lighting, colliders and interactions. It caught Occupied Rooms branches
+  running through furnished rooms; rooms now skip footprints a branch crosses.
+- Same-seed-same-room: the generator is a pure function of (worldSeed, cx, cz), run identically
+  in the worker and in Node; the check compares two runs and prints a world fingerprint.
+- Walk test (injected actions): crossing the lobby's north door streams the next place;
+  colliding with a column stops exactly at radius.
+- Look passes: dimmer sconce/lamp shades, readable blinds, warmer room light, muted vinyl,
+  darker stainless.
 
 ## Known issues
 - Pointer lock is unavailable in the automation browser; screenshots use `debugView`.
