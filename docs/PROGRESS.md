@@ -10,8 +10,8 @@ Phase 1 of docs/PLAN.md, following docs/PHASE1_PROMPT.md. Re-read before each st
 | 1. Engine and feel | done (see below) |
 | 2. Room format and generator | done: 5 places, determinism check passes |
 | 3. Entities | done: moments API, Night Porter (hunter), Waiting Guest (resident) |
-| 4. Player kit | next |
-| 5. Lore | - |
+| 4. Player kit | done: flashlight, floor plan, logbook, discoveries, saves + codes |
+| 5. Lore | next |
 | 6. Deploy | - |
 | 7. Fill out to 8 / 2 / 2 | - |
 
@@ -116,8 +116,28 @@ hunter on the next tick; `__game.debugNoHunters = true` keeps them away. Note ya
 - Look passes on the porter: faceless head tipped forward, white collar, brass buttons, arms on a
   push bar, tarnished cart with a skirted cloth and cloche; tracking streaks broken into sparks.
 
+### Step 4
+- **Flashlight** (F): the only real-time light; battery drains while on and recovers while off.
+- **Floor plan** (M / Tab, or from pause): a blueprint drawn from the real tile plans of every place
+  you have walked through (each visit stores a 256-byte floor/furniture mask), walls inked where
+  floor meets solid, doors left open where the neighbour continues, a red mark for you.
+- **Logbook** (L / J, or from pause): every first discovery, overheard hint and event, newest first.
+- **Discoveries** (title screen): a card per place kind and per occupant. The thumbnail is rendered
+  from the game the first time you find it: places are photographed from the cell's best vantage
+  (longest, widest, best-lit view inside the cell), rendered and copied mid-frame and then the
+  player's frame is re-rendered, so it never flashes; occupants are captured from your own view
+  when you first see them clearly. Places missed by the camera retake on the next visit.
+- **Saves**: localStorage, autosaved every 5 s, on pause and on unload. "New tape" starts a new
+  world but keeps discoveries and the logbook. **Save codes** (Options): deflated JSON in base64
+  (`ML2-...`, ~3 KB after 25 places); thumbnails stay local so codes stay pasteable.
+- Look/theme fix found on the way: guest-room thumbnails came out black because branch corridors
+  carved by `connectDoors` had no lights. `Plan.fillDarkGaps` now lights any hall tile with no
+  fixture within ~4 m, and the determinism check reports "% dark tiles" per kind (was 16-23 % in
+  the guest wing and ice/vending, now under 0.3 % everywhere).
+
 ## Known issues
 - Pointer lock is unavailable in the automation browser; screenshots use `debugView`.
+- Discovering a place costs one ~20-70 ms frame (vantage search + an extra render). Rare.
 
 ## Next
-- Step 4: player kit (map, logbook, discoveries screen, saves with export/import code).
+- Step 5: lore fragments, one document per place just inside its first door.

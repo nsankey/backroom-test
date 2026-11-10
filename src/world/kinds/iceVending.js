@@ -86,6 +86,7 @@ export default {
       const p = { x: (x0 + x1) / 2, z: wallZ };
       plan.prop('sign', p.x, p.z, rot, { text: rng.pick(['ICE', 'VENDING']), y: 2.0, w: 0.8, h: 0.12 });
     }
+    plan.fillDarkGaps([hall], { gap: 4.2, power: 0.65, rng });
     placeLore(plan);
     plan.point('resident', (x0 + x1) / 2, (nj0 + nj1 + 1) * 0.5 * T);
     return plan;

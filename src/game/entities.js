@@ -135,7 +135,14 @@ export class EntitySystem {
         this.lightTick.set(s.id, game.tick);
       }
       v.update(s, alpha, v.light, t);
-      if (mod.role === 'hunter') nearest = Math.min(nearest, Math.hypot(s.x - game.player.x, s.z - game.player.z));
+      const p = game.player;
+      const d = Math.hypot(s.x - p.x, s.z - p.z);
+      if (mod.role === 'hunter') nearest = Math.min(nearest, d);
+      // first clear sight of an occupant goes on the discoveries screen
+      if (!game.paused && d < 12 && game.tick % 10 === 0 && !game.save.isDiscovered('entity:' + s.type)) {
+        const facing = ((s.x - p.x) * -Math.sin(p.yaw) + (s.z - p.z) * -Math.cos(p.yaw)) / (d || 1);
+        if (facing > 0.8 && game.world.lineOfSight(p.x, p.z, s.x, s.z, 1.0)) game.discoverThing('entity:' + s.type, mod.card, undefined, 0.15);
+      }
     }
     // the tape warps as a hunter closes in
     const k = nearest === Infinity ? 0 : Math.max(0, Math.min(1, (16 - nearest) / 13));

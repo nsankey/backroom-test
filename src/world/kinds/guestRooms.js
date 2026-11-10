@@ -63,6 +63,8 @@ export default {
       if (plan.isFloor(Math.floor(p.x / TILE), Math.floor(p.z / TILE)) && !rng.chance(0.2))
         plan.troffer(p.x, p.z, { flicker: rng.chance(0.25), power: 0.7, rot: axis === 'x' ? 0 : Math.PI / 2 });
     }
+    // branch corridors to the other doors get lights too
+    plan.fillDarkGaps([hall], { gap: 4.2, power: 0.65, rng });
     placeLore(plan);
     plan.point('hall', 0, 0, { axis, c0, c1 });
     const p = f.pt(8, mid);

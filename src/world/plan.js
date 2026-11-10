@@ -170,6 +170,37 @@ export class Plan {
       }
   }
 
+  /**
+   * The lights never turned off: put a troffer over any floor tile of the given zones that has no
+   * light within `gap` metres (branch corridors carved by connectDoors, mostly). Deterministic
+   * scan order; flicker comes from the caller's rng.
+   */
+  fillDarkGaps(zones, { gap = 4, power = 0.7, rng = null, flickerChance = 0.2 } = {}) {
+    const set = new Set(zones);
+    for (let j = 1; j < N - 1; j++)
+      for (let i = 1; i < N - 1; i++) {
+        const zi = this.tiles[this.idx(i, j)];
+        if (!set.has(zi) || this.zones[zi].door) continue;
+        const x = (i + 0.5) * TILE;
+        const z = (j + 0.5) * TILE;
+        let near = false;
+        for (const l of this.lights) if ((l.x - x) ** 2 + (l.z - z) ** 2 < gap * gap) near = true;
+        if (near) continue;
+        // centre the fixture across a narrow corridor
+        const wide = (di, dj) => {
+          let n = 0;
+          while (n < 4 && set.has(this.tiles[this.idx(i + di * (n + 1), j + dj * (n + 1))])) n++;
+          return n;
+        };
+        const ox = (wide(1, 0) - wide(-1, 0)) * 0.5 * TILE;
+        const oz = (wide(0, 1) - wide(0, -1)) * 0.5 * TILE;
+        const alongX = wide(1, 0) + wide(-1, 0) >= wide(0, 1) + wide(0, -1);
+        const cx = alongX ? x : x + Math.max(-0.5, Math.min(0.5, ox));
+        const cz = alongX ? z + Math.max(-0.5, Math.min(0.5, oz)) : z;
+        this.troffer(cx, cz, { power, flicker: rng ? rng.chance(flickerChance) : false, rot: alongX ? 0 : Math.PI / 2 });
+      }
+  }
+
   troffer(x, z, { flicker = false, power = 1, color = [0.86, 1.0, 0.84], rot = 0 } = {}) {
     const i = Math.floor(x / TILE);
     const j = Math.floor(z / TILE);

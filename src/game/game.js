@@ -15,7 +15,8 @@ import { AudioEngine } from '../audio/audio.js';
 import { MaterialLibrary } from '../render/materials.js';
 import { CamcorderShader } from '../render/camcorder.js';
 import { World } from '../world/world.js';
-import { CELL } from '../world/constants.js';
+import { CELL, N } from '../world/constants.js';
+import { packCellMask } from './save.js';
 import { createPlayer, applyLook, stepPlayer } from './player.js';
 import { flickerLevel } from './flicker.js';
 import { Moments } from './moments.js';
@@ -73,6 +74,8 @@ export class Game {
     };
     this.checkingOut = null;
     this.fade = 1;
+    this.thumbQueue = []; // [{ key, at }] frames to capture for the discoveries screen
+    this.onUiAction = null; // (name) => void, set by main: 'map' | 'log'
 
     // post: render -> bloom -> tonemap/sRGB -> camcorder
     const composer = (this.composer = new EffectComposer(renderer));
@@ -178,6 +181,15 @@ export class Game {
   pause() {
     this.paused = true;
     this.input.clear();
+    this.autosave();
+  }
+
+  /** Persist where the player is (called every few seconds and on pause). */
+  autosave() {
+    const p = this.player;
+    if (!p || this.checkingOut) return;
+    this.save.data.player = { x: +p.x.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), flashlight: p.flashlight, battery: +p.battery.toFixed(3) };
+    this.save.write();
   }
 
   // ---- simulation tick ------------------------------------------------------------------------
@@ -220,6 +232,16 @@ export class Game {
     if (actions.interact && this.nearInteraction) this.interact(this.nearInteraction);
 
     for (const e of events) this.handleEvent(e);
+
+    if (actions.map) this.onUiAction?.('map');
+    if (actions.log) this.onUiAction?.('log');
+
+    // play time and autosave every 5 s
+    if (this.tick % (TICK_HZ * 5) === 0) {
+      this.save.data.playSeconds += 5;
+      this.save.data.tapeSeconds += 5;
+      this.autosave();
+    }
   }
 
   handleEvent(e) {
@@ -238,6 +260,102 @@ export class Game {
     const s = cell.kind.sounds || {};
     this.audio.setRoomType(s.room || 'medium');
     for (const sys of this.listeners) sys.enterCell?.(this, cell, prev);
+    // the map remembers every place walked through, drawn from its real floor plan
+    const sv = this.save.data;
+    if (!sv.visited[cell.key]) {
+      sv.visited[cell.key] = cell.kindId;
+      sv.maps[cell.key] = packCellMask(cell, N);
+      this.save.write();
+    }
+    const pk = 'place:' + cell.kindId;
+    if (!this.discoverThing(pk, cell.kind.card, cell.kindId) && !this.save.thumbs[pk] && !this.thumbQueue.some((q) => q.key === pk))
+      this.thumbQueue.push({ key: pk, at: this.time + 1.6, vantage: true }); // a photo missed last time
+  }
+
+  /**
+   * First sight of a place or an occupant: a title caption, a logbook line, and a thumbnail
+   * captured from the game a moment later for the discoveries screen.
+   */
+  discoverThing(key, card, kindId = this.currentCell?.kindId, thumbDelay = 1.6) {
+    if (!card || !this.save.markDiscovered(key)) return false;
+    this.addLog(key, `${card.title}. ${card.blurb}`, kindId);
+    this.ui.caption(card.title.toUpperCase(), 3);
+    if (!this.save.thumbs[key]) this.thumbQueue.push({ key, at: this.time + thumbDelay, vantage: key.startsWith('place:') });
+    return true;
+  }
+
+  /**
+   * A good spot to photograph a place from: the walkable point and heading inside the cell with
+   * the longest, widest open view. Pure function of the loaded tile data.
+   */
+  findVantage(cell) {
+    const w = this.world;
+    const inCell = (x, z) => x > cell.ox && z > cell.oz && x < cell.ox + CELL && z < cell.oz + CELL;
+    const ray = (x, z, yaw) => {
+      const dx = -Math.sin(yaw);
+      const dz = -Math.cos(yaw);
+      let d = 0;
+      while (d < 14) {
+        d += 0.25;
+        const px = x + dx * d;
+        const pz = z + dz * d;
+        if (!inCell(px, pz) || !w.isFloor(px, pz)) break;
+      }
+      return d;
+    };
+    const lit = [0, 0, 0];
+    const light = (x, z) => {
+      w.lightAt(x, 1.4, z, lit);
+      return Math.min(1, (lit[0] + lit[1] + lit[2]) / 1.2);
+    };
+    let best = null;
+    for (let j = 1.5; j < CELL; j += 1.25)
+      for (let i = 1.5; i < CELL; i += 1.25) {
+        const x = cell.ox + i;
+        const z = cell.oz + j;
+        if (!w.isWalkable(x, z) || !w.isWalkable(x + 0.45, z) || !w.isWalkable(x - 0.45, z) || !w.isWalkable(x, z + 0.45) || !w.isWalkable(x, z - 0.45)) continue;
+        for (let a = 0; a < 16; a++) {
+          const yaw = (a / 16) * Math.PI * 2;
+          const d = ray(x, z, yaw);
+          const open = d + 0.5 * (ray(x, z, yaw + 0.45) + ray(x, z, yaw - 0.45));
+          if (best && open <= best.score) continue; // light can only lower the score
+          const ahead = Math.min(d, 4);
+          const lum = light(x - Math.sin(yaw) * ahead, z - Math.cos(yaw) * ahead);
+          const score = open * (0.3 + 0.7 * lum);
+          if (!best || score > best.score) best = { x, z, yaw, score };
+        }
+      }
+    return best;
+  }
+
+  addLog(key, text, kind = this.currentCell?.kindId || null) {
+    const log = this.save.data.log;
+    if (log.some((e) => e.key === key)) return false;
+    log.push({ key, text, kind, at: Math.round(this.save.data.playSeconds) });
+    this.save.write();
+    return true;
+  }
+
+  /** Copy the frame just rendered into a small JPEG for a discovery card. */
+  captureThumb(key) {
+    const src = this.renderer.domElement;
+    const w = 320;
+    const h = 200;
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    // centre-crop to 16:10
+    const sa = src.width / src.height;
+    let sw = src.width;
+    let sh = src.height;
+    if (sa > w / h) sw = sh * (w / h);
+    else sh = sw / (w / h);
+    cv.getContext('2d').drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, w, h);
+    try {
+      this.save.setThumb(key, cv.toDataURL('image/jpeg', 0.72));
+    } catch {
+      /* ignore */
+    }
   }
 
   findInteraction() {
@@ -291,10 +409,8 @@ export class Game {
   }
 
   discover(key, text) {
-    const log = this.save.data.log;
-    if (log.some((e) => e.key === key)) return false;
-    log.push({ key, text, kind: this.currentCell?.kindId || null });
-    this.save.write();
+    if (!this.addLog(key, text)) return false;
+    this.save.markDiscovered(key);
     this.ui.caption('(Noted in the logbook.)', 2.5);
     for (const sys of this.listeners) sys.discover?.(this, key, text);
     return true;
@@ -370,6 +486,26 @@ export class Game {
     this.mats.update(this.time);
     for (const sys of this.listeners) sys.frame?.(this, dt, alpha);
     this.composer.render();
+    // thumbnails are taken right after a render, while the drawing buffer is still valid
+    const q = this.thumbQueue[0];
+    if (q && !this.paused && !this.checkingOut && this.fade > 0.97 && this.time >= q.at) {
+      this.thumbQueue.shift();
+      const v = q.vantage && this.currentCell ? this.findVantage(this.currentCell) : null;
+      if (v) {
+        // photograph from the vantage, then put the real frame back before the browser shows it
+        const cam = this.camera;
+        const saved = { p: cam.position.clone(), r: cam.rotation.clone(), fl: this.flashlight.intensity };
+        cam.position.set(v.x, 1.55, v.z);
+        cam.rotation.set(-0.06, v.yaw, 0, 'YXZ');
+        this.flashlight.intensity = 0;
+        this.composer.render();
+        this.captureThumb(q.key);
+        cam.position.copy(saved.p);
+        cam.rotation.copy(saved.r);
+        this.flashlight.intensity = saved.fl;
+        this.composer.render();
+      } else this.captureThumb(q.key);
+    }
   }
 
   present(alpha, dt) {

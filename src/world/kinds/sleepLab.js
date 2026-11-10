@@ -79,6 +79,7 @@ export default {
     }
     plan.troffer(X(12.75), Z(6.3), { power: 0.45, flicker: true });
     for (const x of [2.5, 6.5, 10.5, 14.0]) plan.troffer(X(x), Z(10), { power: 0.7, flicker: rng.chance(0.2) });
+    plan.fillDarkGaps([hall], { gap: 4.2, power: 0.65, rng });
 
     placeLore(plan);
     plan.point('resident', X(6.2), Z(6.2));

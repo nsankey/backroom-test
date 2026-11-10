@@ -34,6 +34,7 @@ for (const kind of KIND_LIST) {
   let notes = 0;
   let ms = 0;
   let tris = 0;
+  let dark = 0;
   for (let k = 0; k < perKind; k++) {
     const seed = 1000 + k * 7919;
     const cx = (k % 7) - 3;
@@ -41,6 +42,19 @@ for (const kind of KIND_LIST) {
     const a = generateCell(seed, cx, cz, { kindOverride: kind.id }).data;
     ms += a.ms;
     tris += a.meshes.reduce((s, m) => s + m.index.length / 3, 0);
+    // "the lights never turned off": share of walkable tiles with no light within 4.5 m
+    let walk = 0;
+    let darkN = 0;
+    for (let j = 0; j < 32; j++)
+      for (let i = 0; i < 32; i++) {
+        const t = j * 32 + i;
+        if (!a.tiles[t] || a.blocked[t]) continue;
+        walk++;
+        const x = (i + 0.5) * 0.5;
+        const z = (j + 0.5) * 0.5;
+        if (!a.lights.some((l) => (l.x - x) ** 2 + (l.z - z) ** 2 < 4.5 * 4.5)) darkN++;
+      }
+    dark += darkN / (walk || 1);
     if (a.notes.length) {
       notes++;
       if (notes <= 3) console.log(`  ${kind.id} seed ${seed} cell ${cx},${cz}: ${a.notes.join('; ')}`);
@@ -56,7 +70,7 @@ for (const kind of KIND_LIST) {
   if (notes) failures++;
   console.log(
     `${notes ? 'FAIL' : 'ok  '} ${kind.id.padEnd(14)} ${perKind} cells, ${notes} with problems, ` +
-      `avg ${(ms / perKind).toFixed(0)} ms, avg ${Math.round(tris / perKind)} tris`,
+      `avg ${(ms / perKind).toFixed(0)} ms, avg ${Math.round(tris / perKind)} tris, ${((dark / perKind) * 100).toFixed(1)}% dark tiles`,
   );
 }
 

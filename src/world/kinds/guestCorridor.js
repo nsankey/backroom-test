@@ -81,6 +81,8 @@ export default {
       const s = rng.pick(slots);
       if (s) plan.prop('sign', s.x, s.z, s.rot, { text: 'GUEST ROOMS 100-140', y: 2.15, w: 0.9, h: 0.09 });
     }
+    // branches to side doors are lit like the main hall
+    plan.fillDarkGaps([hall], { gap: 4.4, power: 0.6, rng });
 
     placeLore(plan);
     plan.point('resident', ...Object.values(f.pt(8, mid)));
