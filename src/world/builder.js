@@ -300,6 +300,8 @@ export class SceneBuilder {
         for (const [di, dj] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
           const ni = i + di;
           const nj = j + dj;
+          // a boundary doorway carries on into the neighbouring place: no wall across its end
+          if (zone.boundary && !p.inside(ni, nj)) continue;
           let y0;
           if (!p.isFloor(ni, nj)) y0 = 0;
           else {

@@ -192,6 +192,11 @@ rapid second write: touch the file.
   6.9, ice 4.0, sleep study 4.6, ballroom 3.6, laundry 3.1, drafting 3.0. All far inside 16.7 ms.
 - Determinism + connectivity + lore check passes for all 8 kinds (fingerprint ab704944).
 
+### Fix after Phase 1
+- Every doorway between places had a grey wall drawn across its outer end (the shell treated the
+  space beyond the cell edge as solid), so doors looked like shallow dead-end alcoves even though
+  you could walk through them. Boundary doorways now leave that face open and show the next place.
+
 ## Known issues
 - Pointer lock is unavailable in the automation browser; screenshots use `debugView`.
 - Discovering a place costs one ~20-70 ms frame (vantage search + an extra render). Rare.
