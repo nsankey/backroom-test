@@ -52,8 +52,24 @@ export function closeNight(run, report, { solo = true } = {}) {
     out.fees.push({ what: report.leftBehind.length > 1 ? `Recovery of ${report.leftBehind.length} crew` : 'Recovery of crew left behind', v: fee * report.leftBehind.length });
     if (solo) out.skip = 1; // the recovered worker is stood down for a night
   }
+  const dead = report.dead || [];
+  if (dead.length && !solo) {
+    // the crew goes on; the firm bills for bringing the lost ones home
+    const fee = Math.max(30, Math.round(Math.max(0, run.ledger) * LEFT_BEHIND_FEE));
+    run.ledger -= fee * dead.length;
+    out.fees.push({ what: dead.length > 1 ? `Recovery of ${dead.length} crew (signal lost)` : 'Recovery of crew (signal lost)', v: fee * dead.length });
+  }
   run.visits[run.siteId] = (run.visits[run.siteId] || 0) + 1;
-  run.history.push({ night: run.night, siteId: run.siteId, banked: report.banked, fees: out.fees.reduce((s, f) => s + f.v, 0), items: report.items.length, leftBehind: report.leftBehind.length });
+  run.history.push({ night: run.night, siteId: run.siteId, banked: report.banked, fees: out.fees.reduce((s, f) => s + f.v, 0), items: report.items.length, leftBehind: report.leftBehind.length, dead: dead.length });
+  if (dead.length && solo) {
+    // a lone receiver whose signal is lost: the contract ends with them
+    run.over = { night: run.night, reason: 'clockedOut', cause: dead[0].cause };
+    out.missed = true;
+    out.clockedOut = dead[0].cause;
+    run.night += 1;
+    out.ledger = run.ledger;
+    return out;
+  }
   // the instalment falls due at the end of its last night (a skipped night still counts)
   const endNight = run.night + out.skip;
   out.skipped = out.skip ? run.night + 1 : null;

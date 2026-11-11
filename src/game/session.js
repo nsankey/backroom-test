@@ -8,16 +8,20 @@ import { closeNight, bank } from './run.js';
 import { shiftMinutes, SHIFT_MIN, LAST_CALL_MIN, overtimeFee } from './clock.js';
 import { VAN } from '../world/kinds/yard.js';
 import { SITES } from '../world/site.js';
+import { inVan } from './van.js';
 import { TICK_HZ } from './constants.js';
+import { CREATURES, nightSchedule } from '../creatures/index.js';
+import { spawnSpot, roll } from '../creatures/common.js';
+import { ALONE_LIMIT } from '../creatures/plusOne.js';
+import { siteValueK } from './run.js';
+import { RNG, hash } from '../core/rng.js';
 
 export const REACH = 2.3;
 const LEVER_CONFIRM_TICKS = TICK_HZ * 4;
+// how loud things are (0..1), for anything listening
+export const LOUD = { setDown: 0.3, thud: 0.75, smash: 1.0 };
 
-/** Is a world point inside the Strongbox's load space? (The yard is cell 0,0.) */
-export function inVan(x, z) {
-  const v = VAN.inner;
-  return x > v.x0 && x < v.x1 && z > v.z0 - 0.2 && z < v.z1;
-}
+export { inVan };
 
 export class Session {
   constructor(run, { solo = true } = {}) {
@@ -34,8 +38,19 @@ export class Session {
       lastCall: false,
       report: null,
       tonight: { banked: 0, items: [] },
+      creatures: [], // plain creature states: { id, type, x, z, yaw, mode, ... }
+      schedule: [], // [{ type, at, done }]
+      nextId: 1,
+      dead: [], // [{ pid, cause }] tonight
     };
     this.events = []; // presentation events since the last drain: { type, ... }
+    this.noises = []; // sounds made this tick: { x, z, loud, pid }
+    this.tmp = [0, 0, 0];
+  }
+
+  /** Something made a sound at (x, z), loudness 0..1. */
+  noise(x, z, loud, pid = null) {
+    if (this.state.phase === 'night') this.noises.push({ x, z, loud, pid });
   }
 
   get phase() {
@@ -60,19 +75,21 @@ export class Session {
 
   addPlayer(pid, name) {
     const v = VAN.inner;
-    this.state.players[pid] = { pid, name, x: (v.x0 + v.x1) / 2, z: v.z0 + 1.6, yaw: 0, active: 0, alive: true, crouch: false, speed: 0 };
+    this.state.players[pid] = { pid, name, x: (v.x0 + v.x1) / 2, z: v.z0 + 1.6, yaw: 0, active: 0, alive: true, crouch: false, speed: 0, still: 0, alone: 0, lamp: false };
     return this.state.players[pid];
   }
 
   /** Movement is owned by each player's client; the session keeps a copy for rules. */
   updatePlayer(pid, p) {
     const s = this.state.players[pid];
-    if (!s) return;
+    if (!s || !s.alive) return;
     s.x = p.x;
     s.z = p.z;
     s.yaw = p.yaw;
+    s.pitch = p.pitch;
     s.crouch = p.crouch > 0.5;
     s.speed = p.speed;
+    s.still = p.still || 0;
   }
 
   held(pid) {
@@ -97,6 +114,10 @@ export class Session {
         return this.deposit(p);
       case 'lever':
         return this.lever(p);
+      case 'noise':
+        if (!p.alive || Math.hypot(intent.x - p.x, intent.z - p.z) > 3) return false;
+        this.noise(intent.x, intent.z, Math.max(0, Math.min(1, intent.loud)), pid);
+        return true;
       case 'writ':
         if (st.phase !== 'brief' || !SITES[intent.siteId]) return false;
         st.run.siteId = intent.siteId;
@@ -143,7 +164,9 @@ export class Session {
       it.dropped++;
       broke = true;
     }
-    this.emit({ type: 'drop', pid: p.pid, id: it.id, itemType: it.type, x, y, z, broke, kg: ITEMS[it.type].kg });
+    const kg = ITEMS[it.type].kg;
+    this.noise(x, z, broke ? LOUD.smash : gentle ? LOUD.setDown * 0.5 : kg > 6 ? LOUD.thud : LOUD.setDown, p.pid);
+    this.emit({ type: 'drop', pid: p.pid, id: it.id, itemType: it.type, x, y, z, broke, kg });
     return true;
   }
 
@@ -205,13 +228,25 @@ export class Session {
     st.lastCall = false;
     st.tonight = { banked: 0, items: [] };
     st.report = null;
+    st.creatures = [];
+    st.dead = [];
+    st.wipeAt = -1;
+    st.schedule = this.noCreatures ? [] : nightSchedule(SITES[site.siteId].hazard).map((e) => ({ ...e, done: false }));
+    for (const p of Object.values(st.players)) {
+      p.alive = true;
+      p.alone = 0;
+    }
     this.emit({ type: 'doorOpen' });
   }
 
-  tick() {
+  /** One tick of the rules. `world` answers spatial questions (paths, sight, light). */
+  tick(world = null) {
     const st = this.state;
     st.tick++;
-    if (st.phase !== 'night') return;
+    if (st.phase !== 'night') {
+      this.noises.length = 0;
+      return;
+    }
     st.shiftTick++;
     const min = this.minutes;
     if (!st.lastCall && min >= LAST_CALL_MIN) {
@@ -219,7 +254,156 @@ export class Session {
       this.emit({ type: 'lastCall' });
     }
     if (st.lever >= 0 && st.tick - st.lever === LEVER_CONFIRM_TICKS) this.emit({ type: 'leverReset' });
-    if (min >= SHIFT_MIN) this.depart('governor');
+    if (world) this.tickCreatures(world, min);
+    this.noises.length = 0;
+    if (st.phase === 'night' && st.wipeAt >= 0 && st.tick >= st.wipeAt) this.depart('wiped');
+    if (st.phase === 'night' && min >= SHIFT_MIN) this.depart('governor');
+  }
+
+  // ---- creatures ---------------------------------------------------------------------------------
+
+  creatureCtx(world, min) {
+    const st = this.state;
+    if (!this._ctx || this._ctx.world !== world) {
+      this._ctx = {
+        world,
+        emit: (e) => this.emit(e),
+        kill: (pid, cause, s) => this.kill(pid, cause, s),
+        tmp: this.tmp,
+      };
+    }
+    const c = this._ctx;
+    c.seed = world.layout?.seed || 0;
+    c.tick = st.tick;
+    c.min = min;
+    c.players = Object.values(st.players);
+    c.items = st.items;
+    c.noises = this.noises;
+    if (c.layout !== world.layout) {
+      c.layout = world.layout;
+      c.cells = world.layout ? [...world.layout.cells.values()] : [];
+    }
+    c.hazard = SITES[st.site.siteId].hazard;
+    return c;
+  }
+
+  tickCreatures(world, min) {
+    const st = this.state;
+    const ctx = this.creatureCtx(world, min);
+    // who has been on their own, and for how long
+    const alive = ctx.players.filter((p) => p.alive);
+    for (const p of alive) {
+      const company = alive.some((q) => q !== p && Math.hypot(q.x - p.x, q.z - p.z) < 6);
+      if (inVan(p.x, p.z) || company) p.alone = 0;
+      else p.alone += 1 / TICK_HZ;
+    }
+    // arrivals on the night's schedule
+    for (const e of st.schedule) {
+      if (e.done || min < e.at) continue;
+      e.done = true;
+      this.spawn(e.type, ctx);
+    }
+    // the Plus-One comes for whoever has been alone too long (after 22:00)
+    if (min > 60 && st.tick % 30 === 0) {
+      const limit = ALONE_LIMIT[ctx.hazard] || 150;
+      for (const p of alive) {
+        if (p.alone < limit || st.creatures.some((c) => c.type === 'plusOne' && c.prey === p.pid)) continue;
+        const spot = this.behind(ctx, p);
+        if (spot) this.spawn('plusOne', ctx, { ...spot, pid: p.pid });
+      }
+    }
+    for (const s of st.creatures) CREATURES[s.type].tick(s, ctx);
+    const gone = st.creatures.filter((s) => s.gone);
+    if (gone.length) {
+      st.creatures = st.creatures.filter((s) => !s.gone);
+      for (const s of gone) this.emit({ type: 'vanish', creature: s.id, creatureType: s.type });
+    }
+  }
+
+  spawn(type, ctx, spot = null) {
+    const st = this.state;
+    const s0 = { id: `c${st.nextId++}`, type };
+    if (type === 'stocktaker') spot = this.layPile(ctx, s0);
+    if (!spot) spot = spawnSpot(ctx, s0, type);
+    if (!spot) return null;
+    const s = { ...CREATURES[type].create(ctx, spot), ...s0 };
+    st.creatures.push(s);
+    this.emit({ type: 'arrive', creature: s.id, creatureType: type, x: s.x, z: s.z });
+    return s;
+  }
+
+  /** The Stocktaker's post: a pile of better-than-usual stock in a deep bay. */
+  layPile(ctx, s0) {
+    const st = this.state;
+    const site = SITES[st.site.siteId];
+    const base = spawnSpot(ctx, s0, 'pile');
+    if (!base) return null;
+    const w = ctx.world;
+    const rng = new RNG(hash(ctx.seed, s0.id, 'pile'));
+    const owned = [];
+    for (let k = 0; k < 6 && owned.length < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + rng.float(-0.3, 0.3);
+      const r = k === 0 ? 0 : rng.float(0.35, 0.65);
+      const x = base.x + Math.cos(a) * r;
+      const z = base.z + Math.sin(a) * r;
+      if (!w.isWalkable(x, z)) continue;
+      // the pile is weighted to the heavier, better stock on the writ's list
+      const type = rng.weighted(site.loot.map(([t, wt]) => [t, wt * (ITEMS[t].value[1] / 20)]));
+      const [v0, v1] = ITEMS[type].value;
+      const id = `${s0.id}:${k}`;
+      st.items.push({ id, type, value: Math.round(rng.float(v0, v1) * siteValueK(site.id) * 1.4), x: +x.toFixed(3), y: 0, z: +z.toFixed(3), yaw: +rng.float(0, 6.28).toFixed(3), holder: null, slot: 0, dropped: 0 });
+      owned.push(id);
+    }
+    if (!owned.length) return null;
+    // it stands a pace off the pile, on the side with room
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      const x = base.x + Math.cos(a) * 1.15;
+      const z = base.z + Math.sin(a) * 1.15;
+      if (w.isWalkable(x, z) && w.isWalkable(x + 0.3, z) && w.isWalkable(x - 0.3, z)) return { x, z, pile: base, owned };
+    }
+    return { x: base.x + 0.9, z: base.z, pile: base, owned };
+  }
+
+  /** A spot a little behind a player, out of their sight, for the Plus-One. */
+  behind(ctx, p) {
+    const w = ctx.world;
+    for (let k = 0; k < 14; k++) {
+      const a = p.yaw + Math.PI + (roll(ctx, { id: p.pid }, 'ba' + k) - 0.5) * 2.2;
+      const d = 7 + roll(ctx, { id: p.pid }, 'bd' + k) * 6;
+      const x = p.x - Math.sin(a) * d;
+      const z = p.z - Math.cos(a) * d;
+      if (!w.isWalkable(x, z) || inVan(x, z)) continue;
+      if (w.lineOfSight(p.x, p.z, x, z, 1.2)) continue;
+      if (!w.findPath(x, z, p.x, p.z, 1500)) continue;
+      return { x, z };
+    }
+    return null;
+  }
+
+  /** Clocked out: the player drops everything where they fall. */
+  kill(pid, cause, creature = null) {
+    const st = this.state;
+    const p = st.players[pid];
+    if (!p || !p.alive || st.phase !== 'night') return;
+    p.alive = false;
+    st.dead.push({ pid, cause, min: this.minutes });
+    let k = 0;
+    for (const it of st.items) {
+      if (it.holder !== pid) continue;
+      const a = k++ * 2.1;
+      it.holder = null;
+      it.x = +(p.x + Math.cos(a) * 0.35).toFixed(3);
+      it.z = +(p.z + Math.sin(a) * 0.35).toFixed(3);
+      it.y = 0;
+      if (ITEMS[it.type].fragile) {
+        it.value = Math.round(it.value * 0.7);
+        it.dropped++;
+      }
+    }
+    this.emit({ type: 'death', pid, cause, creature: creature?.id, x: p.x, z: p.z });
+    // nobody left: the governor takes the Strongbox home a few seconds later
+    if (!Object.values(st.players).some((q) => q.alive)) st.wipeAt = st.tick + 4 * TICK_HZ;
   }
 
   /** The Strongbox leaves: bank what is aboard, lose what is not, settle the night. */
@@ -239,8 +423,11 @@ export class Session {
     const overtime = overtimeFee(Math.min(min, SHIFT_MIN));
     const banked = st.tonight.banked;
     const items = st.tonight.items;
-    const summary = closeNight(st.run, { banked, items, overtime, leftBehind, lost }, { solo: this.solo });
+    const dead = st.dead.slice();
+    const summary = closeNight(st.run, { banked, items, overtime: reason === 'wiped' ? 0 : overtime, leftBehind, lost, dead }, { solo: this.solo });
     summary.reason = reason;
+    summary.dead = dead;
+    st.creatures = [];
     summary.leftBehind = leftBehind;
     summary.lost = lost;
     summary.departed = min;

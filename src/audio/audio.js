@@ -538,6 +538,49 @@ const SOUNDS = {
     o.stop(t + 3.6);
   },
 
+  // ---- what is in the building with you ----
+  tally(ae, out, t) {
+    // a brass hand tally pressed once: the plunger's clack and the number wheel's tick
+    noiseBurst(ae, out, t, { freq: 2400, q: 4, peak: 0.32, d: 0.025 });
+    noiseBurst(ae, out, t + 0.035, { freq: 5200, q: 7, peak: 0.18, d: 0.012 });
+    tone(ae, out, t + 0.002, 3150, 'sine', 0.035, 0.001, 0.12);
+  },
+  tallyShort(ae, out, t) {
+    // the count does not come out: the reset knob spun hard, the wheels whirring back to nought
+    for (let k = 0; k < 14; k++) noiseBurst(ae, out, t + k * 0.028, { freq: 4600 - k * 90, q: 6, peak: 0.1, d: 0.012 });
+    tone(ae, out, t + 0.45, 210, 'square', 0.035, 0.005, 0.5);
+    tone(ae, out, t + 0.45, 222, 'square', 0.03, 0.005, 0.5);
+  },
+  lockOn(ae, out, t) {
+    // the listening horn finds you: a tuning-fork note bent sharply upward, wavering
+    const o = ae.ctx.createOscillator();
+    o.frequency.setValueAtTime(520, t);
+    o.frequency.exponentialRampToValueAtTime(1900, t + 0.9);
+    const vib = ae.ctx.createOscillator();
+    vib.frequency.value = 9;
+    const vg = ae.ctx.createGain();
+    vg.gain.value = 22;
+    vib.connect(vg).connect(o.frequency);
+    const g = ae.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.16, t + 0.25);
+    g.gain.setValueAtTime(0.16, t + 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+    o.connect(g).connect(out);
+    o.start(t);
+    vib.start(t);
+    o.stop(t + 1.35);
+    vib.stop(t + 1.35);
+  },
+  signalLost(ae, out, t) {
+    // the helmet feed dropping: a burst of hash, then the transmitter's line-up tone
+    noiseBurst(ae, out, t, { freq: 2600, q: 0.4, peak: 0.55, a: 0.003, d: 0.9 });
+    tone(ae, out, t + 0.85, 1000, 'sine', 0.07, 0.01, 2.6);
+  },
+  restock(ae, out, t) {
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 700, peak: 0.25, d: 0.09 });
+  },
+
   // ---- ambience: the building settling, far off ----
   drip(ae, out, t) {
     sweep(ae, out, t, 1400 + ae.rng.float(0, 600), 2600, 0.05, 'sine', 0.05, 0.002);
@@ -662,6 +705,80 @@ const LOOPS = {
     o.start();
     lfo.start();
     return [() => src.stop(), () => o.stop(), () => lfo.stop()];
+  },
+  drone(ae, out) {
+    // the Hushwarden's tell: a struck tuning fork that never decays, two near notes beating
+    const ctx = ae.ctx;
+    const stops = [];
+    const g = ctx.createGain();
+    g.gain.value = 0.05;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.31;
+    const lg = ctx.createGain();
+    lg.gain.value = 0.018;
+    lfo.connect(lg).connect(g.gain);
+    for (const [f, a] of [[293.7, 1], [296.1, 0.8], [881, 0.18]]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = f;
+      const og = ctx.createGain();
+      og.gain.value = a;
+      o.connect(og).connect(g);
+      o.start();
+      stops.push(() => o.stop());
+    }
+    g.connect(out);
+    lfo.start();
+    stops.push(() => lfo.stop());
+    return stops;
+  },
+  whistle(ae, out) {
+    // the Plus-One's tell: someone whistling a little tune to themselves, never quite the same
+    const ctx = ae.ctx;
+    const o = ctx.createOscillator();
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5.5;
+    const vg = ctx.createGain();
+    vg.gain.value = 9;
+    vib.connect(vg).connect(o.frequency);
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const breath = ctx.createBufferSource();
+    breath.buffer = ae.noiseBuf;
+    breath.loop = true;
+    const bf = ctx.createBiquadFilter();
+    bf.type = 'bandpass';
+    bf.frequency.value = 1500;
+    bf.Q.value = 2;
+    const bg = ctx.createGain();
+    bg.gain.value = 0.08;
+    breath.connect(bf).connect(bg).connect(g);
+    o.connect(g).connect(out);
+    o.start();
+    vib.start();
+    breath.start();
+    // a phrase every few seconds: notes from a five-note scale, some slurred
+    const scale = [0, 2, 5, 7, 9, 12, 14];
+    let at = ctx.currentTime + 0.3;
+    const plan = () => {
+      while (at < ctx.currentTime + 4) {
+        const n = 4 + Math.floor(ae.rng.float(0, 4));
+        let deg = Math.floor(ae.rng.float(1, 5));
+        for (let k = 0; k < n; k++) {
+          deg = Math.max(0, Math.min(scale.length - 1, deg + Math.floor(ae.rng.float(-2, 3))));
+          const f = 1046 * 2 ** (scale[deg] / 12);
+          const len = ae.rng.float(0, 1) < 0.25 ? 0.5 : 0.24;
+          o.frequency.setTargetAtTime(f, at, 0.025);
+          g.gain.setTargetAtTime(0.09, at, 0.02);
+          g.gain.setTargetAtTime(ae.rng.float(0, 1) < 0.5 ? 0.0 : 0.04, at + len * 0.8, 0.03);
+          at += len;
+        }
+        g.gain.setTargetAtTime(0, at, 0.05);
+        at += ae.rng.float(1.2, 3.2);
+      }
+    };
+    plan();
+    const timer = setInterval(plan, 1000);
+    return [() => clearInterval(timer), () => o.stop(), () => vib.stop(), () => breath.stop()];
   },
   breath(ae, out) {
     const ctx = ae.ctx;

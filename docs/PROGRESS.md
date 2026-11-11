@@ -11,7 +11,7 @@ look and sound in docs/STYLE.md. The earlier game's progress log is in git histo
 | --- | --- |
 | 0. Branch, premise, world | done: finite sites, 8 facility kinds, Halvard textures and props |
 | 1. Loop without threats | done: van brief, writs, night clock, loot, carrying, night safe, departure, Instalment, fail screen |
-| 2. Threats | not started |
+| 2. Threats | done: four creatures with tells and counterplay, death and drop, signal-lost cut, notices |
 | 3. Tools | not started |
 | 4. Co-op (local) | not started |
 
@@ -49,6 +49,27 @@ the rules directly. Yaw: 0 faces -z, `-PI/2` faces +x.
 5. **Manifest**, then back to the brief. The Instalment (ħ400, then ×1.5 + 50) falls due every
    three nights. Miss it and the contract is terminated (notice with a run summary).
 
+## What is in the buildings
+
+No gore anywhere: a death is the helmet camera turning to look, breaking up, and NO SIGNAL.
+The firm's terminal has a NOTICES tab that states every tell and counterplay in-world.
+
+| Creature | Punishes | Tell | Counterplay |
+| --- | --- | --- | --- |
+| **Hushwarden** (blind, a brass listening horn for a head, grey dust coat) | noise | a tuning-fork drone that carries; a rising whistle when it locks on | crouch, stand still, set things down gently (crouched), make a noise elsewhere |
+| **Dimmer** (a coat hung with nobody in it) | darkness | tubes popping in a ring, a pressure hush, the camera breaking up, a travelling patch where the baked light dies | stay under working light and keep moving to the van; it rushes through dark, crawls into light |
+| **Stocktaker** (stooped clerk, a hand-tally counter for a head) | taking from its pile | the click of the count every 20 s, chalk tally marks round its post | grab between counts, or swap something onto the pile (it counts pieces, not value); drop the item and it fetches it back |
+| **Plus-One** (a receiver with the visor down and a dark tally lamp) | being alone | whistling; the helmet's counter reads PERSONS 2 and a face box finds it | keep moving (it closes only while you stand still), regroup, or get in the van |
+
+Schedule (`src/creatures/index.js`): the Stocktaker is at its post from 21:00; the Hushwarden
+starts its rounds at 23:30 / 22:45 / 22:00 by hazard (a second one later on harder writs); the
+Dimmer wakes at 01:30 / 01:00 / 00:30. The Plus-One is not scheduled: it comes after 150 / 120
+/ 95 seconds alone (not within 6 m of crew, not in the van), after 22:00.
+
+Death: everything carried drops where you fall. In co-op the night goes on for the others and
+the firm bills a recovery fee per lost receiver. Solo, the night ends and the contract with it
+(NOTICE OF SIGNAL LOSS with the run summary).
+
 ## Architecture (decisions and why)
 
 - **Finite sites on the old grid generator.** `src/world/site.js` grows a site per
@@ -74,6 +95,11 @@ the rules directly. Yaw: 0 faces -z, `-PI/2` faces +x.
   auto-exposure that hunts (a spring driven by `lightAt` ahead of the player), gain noise that
   rises with exposure, a cold slate toe and orange highlight clipping. `uGlitch` (compression
   smear) is reserved for creatures.
+- **Creatures are session state** (`src/creatures/`): plain objects ticked by `Session.tick(world)`
+  on the host, with every random choice hashed from (site seed, creature id, tick). The world
+  is passed in only to answer questions (paths, line of sight, light). Players' footsteps and
+  set-downs reach them as `noise` intents. Their looks and sounds live in `creatures/views.js`
+  and ease toward the state, so 15 Hz co-op snapshots will look smooth.
 - **Saves**: the run is checkpointed in the van before each night (`nightreceivers.save.v1`).
   A night abandoned halfway is a night not worked. Codes are `NR1-` deflated JSON.
 
@@ -90,3 +116,23 @@ the rules directly. Yaw: 0 faces -z, `-PI/2` faces +x.
   of load floor showed under the van's sides (added valances).
 - Economy: a site holds 40 to 50 items, far more than one person can carry out; the first
   Instalment is ħ400.
+
+## Step 2 log
+
+- Behaviour checked by driving the session directly: the Hushwarden ignores a still player,
+  investigates a smash, locks on to footsteps within 7 m and kills; the Stocktaker's count comes
+  up short, it hunts the holder, then fetches the dropped item back to its pile; the Dimmer only
+  drifts toward a lit player and kills in the dark; the Plus-One holds back while you move and
+  closes while you stand. Solo death runs to the manifest and the NOTICE OF SIGNAL LOSS.
+- Fixed: every replan sent creatures back to the centre of their own tile, so slow walkers
+  shuffled on the spot (paths now start at the second node).
+- Look pass 1: the Stocktaker's head was a flat yellow disc and its legs were pins (darker
+  brass drum with a bezel, domed back, plunger and number window; trousers and shoes); figures
+  floated (blob shadows); the Stocktaker's pile read as clutter (chalked tally marks round its
+  post).
+- Look pass 2: the Hushwarden was a pale cone with a toy-yellow horn (dark split coat, belt,
+  shoulder cape, aged brass with a verdigris rim); the chalk was bright as snow (fewer, fainter
+  marks); the crew figure's head was a small box and its visor read as hair (rounded head,
+  shoulders, a wraparound smoked visor with a highlight).
+- Cost: creature simulation is under 0.05 ms a tick with five creatures; frame time unchanged
+  at about 3 ms.

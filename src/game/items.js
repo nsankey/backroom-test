@@ -64,6 +64,39 @@ export const fmtH = (v) => `ħ${Math.round(v)}`;
  * A model for an item: { object, mats, height } with materials collected so the caller can light
  * them. The origin sits on the floor under the item's centre; +z is its front.
  */
+/**
+ * Bake a fixed shade into every face's vertex colours (lit from above and a little from one
+ * side), so unlit models read as solid shapes. Uses each mesh's transform within the group.
+ */
+export function bakeShade(g) {
+  g.updateMatrixWorld(true);
+  const n = new THREE.Vector3();
+  const nm = new THREE.Matrix3();
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
+  const rel = new THREE.Matrix4();
+  g.traverse((o) => {
+    if (!o.isMesh || o.userData.noShade) return;
+    const geo = o.geometry;
+    const nrm = geo.attributes.normal;
+    rel.multiplyMatrices(inv, o.matrixWorld);
+    nm.getNormalMatrix(rel);
+    const col = new Float32Array(nrm.count * 3);
+    for (let k = 0; k < nrm.count; k++) {
+      n.fromBufferAttribute(nrm, k).applyMatrix3(nm).normalize();
+      const s = 0.5 + 0.42 * Math.max(0, n.y) + 0.14 * n.x + 0.08 * n.z - 0.12 * Math.max(0, -n.y);
+      col[k * 3] = col[k * 3 + 1] = col[k * 3 + 2] = s;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  });
+}
+
+/** Colour unlit materials by a light level (plus a floor so nothing vanishes outright). */
+export function lightMats(mats, rgb, boost = 1, floor = 0.035) {
+  const mx = Math.max(rgb[0], rgb[1], rgb[2]);
+  const k = (mx > 0.6 ? 0.6 / mx : 1) * boost * 1.6;
+  for (const m of mats) m.color.setRGB(m.userData.base.r * (rgb[0] * k + floor), m.userData.base.g * (rgb[1] * k + floor), m.userData.base.b * (rgb[2] * k + floor));
+}
+
 export function buildModel(type) {
   const g = new THREE.Group();
   const mats = [];
@@ -210,32 +243,14 @@ export function buildModel(type) {
   let height = 0.2;
   if (fn) height = fn();
   else add(box(0.2, 0.2, 0.2), mat(0xff00ff), 0, 0.1, 0);
-  g.updateMatrixWorld(true);
-  const n = new THREE.Vector3();
-  const nm = new THREE.Matrix3();
-  g.traverse((o) => {
-    if (!o.isMesh) return;
-    const geo = o.geometry;
-    const nrm = geo.attributes.normal;
-    nm.getNormalMatrix(o.matrix);
-    const col = new Float32Array(nrm.count * 3);
-    for (let k = 0; k < nrm.count; k++) {
-      n.fromBufferAttribute(nrm, k).applyMatrix3(nm).normalize();
-      const s = 0.5 + 0.42 * Math.max(0, n.y) + 0.14 * n.x + 0.08 * n.z - 0.12 * Math.max(0, -n.y);
-      col[k * 3] = col[k * 3 + 1] = col[k * 3 + 2] = s;
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  });
+  bakeShade(g);
   return {
     object: g,
     mats,
     height,
     /** Light the item from the light level at its spot (plus a floor so it never vanishes). */
     setLight(rgb, boost = 1) {
-      const mx = Math.max(rgb[0], rgb[1], rgb[2]);
-      const k = (mx > 0.6 ? 0.6 / mx : 1) * boost * 1.6;
-      const f = 0.035;
-      for (const m of mats) m.color.setRGB(m.userData.base.r * (rgb[0] * k + f), m.userData.base.g * (rgb[1] * k + f), m.userData.base.b * (rgb[2] * k + f));
+      lightMats(mats, rgb, boost);
     },
     dispose() {
       g.traverse((o) => {

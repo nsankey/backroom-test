@@ -80,6 +80,59 @@ body {
   font-size: 11px;
 }
 
+#hud-persons {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 11px;
+}
+#hud-persons.two {
+  color: var(--ink);
+}
+/* the camera's face-detect box: a thin corner-bracketed square that tracks a head */
+#hud-face {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 60px;
+  height: 60px;
+  display: none;
+  border: 1px solid rgba(233, 236, 230, 0.55);
+  outline: 1px solid rgba(0, 0, 0, 0.25);
+}
+#hud-face.on {
+  display: block;
+}
+#hud-face span {
+  position: absolute;
+  left: -1px;
+  top: -15px;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: rgba(233, 236, 230, 0.75);
+}
+#nosignal {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  background: #0b0d0c;
+  font-size: 34px;
+  letter-spacing: 0.3em;
+  font-weight: bold;
+}
+#nosignal.on {
+  display: flex;
+}
+#nosignal small {
+  margin-top: 14px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+  font-weight: normal;
+}
+
 #hud-tr {
   position: absolute;
   right: 28px;

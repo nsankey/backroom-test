@@ -7,6 +7,7 @@ import { KINDS } from '../world/kinds/index.js';
 import { CELL, N } from '../world/constants.js';
 import { ITEMS, fmtH } from '../game/items.js';
 import { fmtClock } from '../game/clock.js';
+import { CAUSE_TEXT } from '../creatures/index.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const HAZARD = ['', 'LOW', 'MODERATE', 'HIGH'];
@@ -17,12 +18,36 @@ function head(title, sub, close = true) {
 
 // ---- the van terminal -------------------------------------------------------------------------
 
+/** The firm's standing notices: each thing in the buildings, its tell, and what to do. */
+const NOTICES = [
+  {
+    title: 'NOTICE 14 · QUIET HOURS',
+    where: 'ALL SITES',
+    text: 'A humming like a struck tuning fork means the night quiet-keeper is on its rounds. It is blind and hears very well. It goes to where it heard something and listens; if it hears you again close by it whistles and comes at once. Crouch, keep still, set things down gently. A noise made elsewhere will draw it off.',
+  },
+  {
+    title: 'NOTICE 22 · STOCK UNDER COUNT',
+    where: 'ALL SITES',
+    text: 'Stock found piled on a chalked floor is still under count by the clerk who stands over it. You will hear the counter click. It counts every twenty seconds and pursues any shortfall until the item is set down again. It counts pieces, not value.',
+  },
+  {
+    title: 'NOTICE 31 · LIGHTING FAILURES',
+    where: 'AFTER MIDNIGHT',
+    text: 'Where tubes fail in a ring and the ears feel pressure, keep under working light and keep moving toward the Strongbox. In darkness it comes quickly; into light, only slowly, and only by putting the light out.',
+  },
+  {
+    title: 'NOTICE 3 · NO WORKING ALONE',
+    where: 'ALL SITES',
+    text: 'Receivers will work within sight of one another. A receiver who has been on their own too long may hear whistling, and the helmet counter may read PERSONS 2. Do not stop. Do not wait for it. Rejoin the crew or return to the Strongbox.',
+  },
+];
+
 export function terminalPanel(el, game, { onIntent, tab = null }) {
   const s = game.session.state;
   const run = s.run;
   const brief = s.phase === 'brief';
   tab = tab || (brief ? 'writs' : 'ledger');
-  const tabs = (brief ? ['writs', 'ledger'] : ['ledger', 'site']).map((t) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${t.toUpperCase()}</button>`).join('');
+  const tabs = (brief ? ['writs', 'notices', 'ledger'] : ['ledger', 'site', 'notices']).map((t) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${t.toUpperCase()}</button>`).join('');
   let body = '';
   if (tab === 'writs') {
     body =
@@ -46,6 +71,10 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
       ${tonight}
       <table><tr><th>NIGHT</th><th>WRIT</th><th class="v">BANKED</th><th class="v">FEES</th></tr>${rows || '<tr><td colspan="4" class="muted">No nights worked yet.</td></tr>'}</table>
       <p class="muted">Salvage is valued by the strongroom when it goes down the night safe. Anything still aboard at departure is banked automatically. Overtime after 03:00 is charged at ħ5 per ten minutes.</p>`;
+  } else if (tab === 'notices') {
+    body =
+      `<p class="muted">Standing notices to receivers on Halvard premises. Read before every shift. The firm accepts no liability for receivers who did not.</p>` +
+      NOTICES.map((n) => `<div class="writ"><div class="h"><span>${esc(n.title)}</span><span>${esc(n.where)}</span></div><div class="b">${esc(n.text)}</div></div>`).join('');
   } else if (tab === 'site') {
     const site = SITES[s.site.siteId];
     const left = s.items.filter((i) => !i.holder).length;
@@ -164,16 +193,21 @@ export function reportPanel(el, report, run, { onContinue }) {
   const fees = report.fees.map((f) => `<tr><td>${esc(f.what)}</td><td class="v bad">-${fmtH(f.v)}</td></tr>`).join('');
   const lost = report.lost.length ? `<tr><td class="bad">Lost with the crew left behind: ${report.lost.map((l) => esc(ITEMS[l.type].name)).join(', ')}</td><td></td></tr>` : '';
   const how =
-    report.reason === 'lever'
-      ? `Departed ${fmtClock(report.departed)} on the governor.`
-      : `The governor departed at 04:00${report.leftBehind.length ? ', without everyone' : ''}.`;
+    report.reason === 'wiped'
+      ? `Signal lost from every helmet by ${fmtClock(Math.max(...report.dead.map((d) => d.min ?? report.departed)))}. The Strongbox returned on its governor, empty-cabbed.`
+      : report.reason === 'lever'
+        ? `Departed ${fmtClock(report.departed)} on the governor.`
+        : `The governor departed at 04:00${report.leftBehind.length ? ', without everyone' : ''}.`;
+  const lostCrew = (report.dead || []).length && !report.clockedOut ? `<p class="bad">Signal lost: ${report.dead.length} of the crew. ${esc(CAUSE_TEXT[report.dead[0].cause] || '')}</p>` : '';
+  const clocked = report.clockedOut ? `<p class="bad">${esc(CAUSE_TEXT[report.clockedOut] || 'Your signal was lost.')}</p>` : '';
   let inst = '';
-  if (report.paid) inst = `<p><span class="stamp good">INSTALMENT PAID</span> &nbsp; ${fmtH(report.target)} taken. The next Instalment is ${fmtH(report.nextTarget)}, due in three nights.</p>`;
+  if (report.clockedOut) inst = `<p><span class="stamp bad">CLOCKED OUT</span> &nbsp; A receiver working alone cannot be recovered. The contract ends tonight.</p>`;
+  else if (report.paid) inst = `<p><span class="stamp good">INSTALMENT PAID</span> &nbsp; ${fmtH(report.target)} taken. The next Instalment is ${fmtH(report.nextTarget)}, due in three nights.</p>`;
   else if (report.missed) inst = `<p><span class="stamp bad">INSTALMENT MISSED</span> &nbsp; ${fmtH(report.target)} was due.</p>`;
   else inst = `<p class="muted">Instalment ${fmtH(run.instalment.target)} due at the end of night ${run.instalment.due}. Still owed: ${fmtH(Math.max(0, run.instalment.target - run.ledger))}.</p>`;
   const behind = report.leftBehind.length ? `<p class="bad">You were not aboard at 04:00. A recovery crew collected you at first light. Everything you carried is gone, and you are stood down for night ${report.skipped}.</p>` : '';
   el.innerHTML = `<div class="term">${head(`NIGHT ${report.night} · MANIFEST`, `${site.writ} · ${site.name.toUpperCase()} · ${site.place.toUpperCase()}`, false)}
-    <p>${how}</p>${behind}
+    <p>${how}</p>${clocked}${lostCrew}${behind}
     <table><tr><th>BANKED</th><th class="v">${report.items.length} ITEMS</th></tr>${items || '<tr><td class="muted">Nothing banked tonight.</td><td></td></tr>'}
     <tr><td><b>Total</b></td><td class="v"><b>${fmtH(report.banked)}</b></td></tr>${fees}${lost}</table>
     <div class="foot"><div><div class="muted">LEDGER</div><div class="big">${fmtH(report.ledger)}</div></div><button data-continue>${run.over ? 'Read the notice' : 'Back to the van'}</button></div>
@@ -185,9 +219,17 @@ export function reportPanel(el, report, run, { onContinue }) {
 
 export function overPanel(el, run, { onNew, onTitle }) {
   const best = run.best ? `${ITEMS[run.best.type].name}, ${fmtH(run.best.value)}` : 'nothing of note';
-  const why = run.over?.reason === 'debt' ? 'Your ledger went into the red.' : `The Instalment of ${fmtH(run.instalment.target)} fell due and was not met.`;
-  el.innerHTML = `<div class="term">${head('NOTICE OF TERMINATION', 'GRISHOLM & DAUGHTERS · RECEIVERS AND LIQUIDATORS', false)}
-    <p>${esc(why)} Your contract is terminated with effect from 04:00. Your debt has been sold on to a sister firm. They will be in touch.</p>
+  const clocked = run.over?.reason === 'clockedOut';
+  const why = clocked
+    ? `${CAUSE_TEXT[run.over.cause] || 'Your signal was lost.'} Night ${run.over.night}.`
+    : run.over?.reason === 'debt'
+      ? 'Your ledger went into the red.'
+      : `The Instalment of ${fmtH(run.instalment.target)} fell due and was not met.`;
+  const tail = clocked
+    ? 'Your contract is closed. Your ledger passes to your next of kin, with the debt.'
+    : 'Your contract is terminated with effect from 04:00. Your debt has been sold on to a sister firm. They will be in touch.';
+  el.innerHTML = `<div class="term">${head(clocked ? 'NOTICE OF SIGNAL LOSS' : 'NOTICE OF TERMINATION', 'GRISHOLM & DAUGHTERS · RECEIVERS AND LIQUIDATORS', false)}
+    <p>${esc(why)} ${esc(tail)}</p>
     <table>
       <tr><td>Nights worked</td><td class="v">${run.history.length}</td></tr>
       <tr><td>Instalments paid</td><td class="v">${run.paid}</td></tr>

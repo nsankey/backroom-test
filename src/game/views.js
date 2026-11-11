@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { buildModel, ITEMS } from './items.js';
 import { VAN } from '../world/kinds/yard.js';
+import { CreatureViews } from '../creatures/views.js';
 
 const _light = [0, 0, 0];
 
@@ -16,6 +17,7 @@ export class Views {
     this.handGroup.position.set(0.3, -0.34, -0.62);
     game.camera.add(this.handGroup);
     this.buildDoor();
+    this.creatures = new CreatureViews(game);
   }
 
   buildDoor() {
@@ -65,10 +67,12 @@ export class Views {
     g.world.dynamic.length = 0;
     if (d.open < 0.6) g.world.dynamic.push([VAN.door.x - 0.6, VAN.door.z + 0.1, VAN.door.x + 0.6, VAN.door.z + 0.4]);
 
-    // items on the floor
+    this.creatures.frame(dt);
+
+    // items on the floor (and in a creature's hands)
     const seen = new Set();
     for (const it of s.items) {
-      if (it.holder) continue;
+      if (it.holder && !String(it.holder).startsWith('c')) continue;
       seen.add(it.id);
       let v = this.items.get(it.id);
       const key = `${it.x},${it.y},${it.z},${it.yaw}`;
@@ -77,10 +81,12 @@ export class Views {
         g.scene.add(v.model.object);
         this.items.set(it.id, v);
       }
-      if (v.key !== key) {
+      if (v.key !== key || (this.creatures.dark.w > 0 && g.tick % 6 === 0)) {
         v.model.object.position.set(it.x, it.y, it.z);
         v.model.object.rotation.set(0, it.yaw, 0);
         g.world.lightAt(it.x, it.y + 0.3, it.z, _light);
+        const dk = this.creatures.darkK(it.x, it.z);
+        for (let k = 0; k < 3; k++) _light[k] *= dk;
         v.model.setLight(_light, 1.1);
         v.key = key;
       }
@@ -132,5 +138,6 @@ export class Views {
       v.model.dispose();
     }
     this.items.clear();
+    this.creatures.clear();
   }
 }

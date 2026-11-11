@@ -201,7 +201,7 @@ export class Game {
     const s = this.session;
     const p = this.player;
     const actions = this.input.takeActions();
-    const frozen = !s || this.travel || s.phase === 'report' || s.phase === 'over';
+    const frozen = !s || this.travel || s.phase === 'report' || s.phase === 'over' || !!this.deathCut;
     if (frozen) {
       actions.moveX = actions.moveZ = 0;
       actions.run = false;
@@ -215,6 +215,8 @@ export class Game {
     stepPlayer(p, actions, this.world, TICK, events, this.carriedKg());
     if (!s) return;
     s.updatePlayer(this.pid, p);
+    // footsteps are heard by whatever is listening
+    for (const e of events) if (e.type === 'step') s.applyIntent(this.pid, { type: 'noise', x: e.x, z: e.z, loud: e.loud });
 
     // slots, take, drop, interact: all become intents
     const me = this.localPlayer();
@@ -226,7 +228,7 @@ export class Game {
     if (actions.map) this.onUiAction?.('map');
 
     // the session's own clock, alarms and departure
-    s.tick();
+    s.tick(this.world);
     for (const e of s.drain()) this.onSessionEvent(e);
 
     // current place
@@ -321,7 +323,111 @@ export class Game {
       case 'writ':
         this.audio.play('click');
         break;
+      // ---- creatures ----
+      case 'lock':
+        this.audio.play('lockOn', { x: e.x, y: 2.4, z: e.z }, { ref: 4, wet: 0.6 });
+        this.glitch = Math.max(this.glitch || 0, 0.25);
+        break;
+      case 'pop':
+        this.audio.play('tubePop', { x: e.x + 1, y: 3, z: e.z }, { wet: 0.6 });
+        this.glitch = Math.max(this.glitch || 0, 0.35);
+        break;
+      case 'tally':
+        this.audio.play('tally', { x: e.x, y: 1.7, z: e.z }, { ref: 2.5, wet: 0.5 });
+        this.views.creatures.onEvent(e);
+        break;
+      case 'short':
+        this.audio.play('tallyShort', { x: e.x, y: 1.7, z: e.z }, { ref: 3, wet: 0.5 });
+        this.views.creatures.onEvent(e);
+        break;
+      case 'restock':
+        this.audio.play('restock', pos);
+        break;
+      case 'death':
+        if (mine) this.beginDeathCut(e);
+        break;
     }
+  }
+
+  /** Your helmet camera's last seconds: it turns to what is there, breaks up, and is gone. */
+  beginDeathCut(e) {
+    const look = this.views.creatures.headOf(e.creature);
+    this.deathCut = { t: 0, look, from: { yaw: this.player.yaw, pitch: this.player.pitch } };
+    this.audio.play('sting');
+  }
+
+  updateDeathCut(dt) {
+    const d = this.deathCut;
+    if (!d) return;
+    d.t += dt;
+    const p = this.player;
+    if (d.look && d.t < 1.1) {
+      const dx = d.look.x - p.x;
+      const dz = d.look.z - p.z;
+      const yaw = Math.atan2(-dx, -dz);
+      const pitch = Math.atan2(d.look.y - p.eye, Math.hypot(dx, dz) || 0.1);
+      const k = Math.min(1, dt * 9);
+      let dy = yaw - p.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      p.yaw += dy * k;
+      p.pitch += (Math.max(-0.6, Math.min(0.9, pitch)) - p.pitch) * k;
+    }
+    this.glitch = Math.min(1, 0.2 + d.t * 1.1);
+    if (d.t > 1.0 && !d.cut) {
+      d.cut = true;
+      this.audio.play('signalLost');
+      document.getElementById('nosignal-sub').textContent = `CH 1 · ${crewId(this.session.state.run.seed)} · ${fmtClock(this.minutes)}`;
+      document.getElementById('nosignal').classList.add('on');
+    }
+  }
+
+  clearDeathCut() {
+    this.deathCut = null;
+    document.getElementById('nosignal')?.classList.remove('on');
+  }
+
+  /** The helmet camera's person counter and face box: the Plus-One's tell (and the crew's). */
+  updateFaces() {
+    const s = this.session;
+    const elP = this._personsEl || (this._personsEl = document.getElementById('hud-persons'));
+    const elF = this._faceEl || (this._faceEl = document.getElementById('hud-face'));
+    if (!elP || !elF) return;
+    const st = s?.state;
+    const p = this.player;
+    const heads = [];
+    if (st && st.phase === 'night' && !this.deathCut) {
+      for (const q of Object.values(st.players)) if (q.pid !== this.pid && q.alive) heads.push({ x: q.x, y: 1.7, z: q.z });
+      for (const c of st.creatures) if (c.type === 'plusOne') heads.push({ x: c.x, y: 1.7, z: c.z, id: c.id });
+    }
+    const near = heads.filter((h) => Math.hypot(h.x - p.x, h.z - p.z) < 16);
+    const n = 1 + near.length;
+    const txt = `PERSONS ${n}`;
+    if (elP.textContent !== txt) {
+      elP.textContent = txt;
+      elP.classList.toggle('two', n > 1);
+    }
+    // the box goes round the nearest head in view
+    let best = null;
+    const v = this._v3 || (this._v3 = new THREE.Vector3());
+    for (const h of near) {
+      if (h.id) {
+        const hp = this.views.creatures.headOf(h.id);
+        if (hp) Object.assign(h, { x: hp.x, y: hp.y, z: hp.z });
+      }
+      v.set(h.x, h.y, h.z).project(this.camera);
+      if (v.z > 1 || Math.abs(v.x) > 0.95 || Math.abs(v.y) > 0.95) continue;
+      const d = Math.hypot(h.x - p.x, h.z - p.z);
+      if (!this.world.lineOfSight(p.x, p.z, h.x, h.z, 1.5)) continue;
+      if (!best || d < best.d) best = { d, sx: v.x, sy: v.y };
+    }
+    if (best) {
+      const size = Math.max(14, Math.min(120, 120 / best.d));
+      const x = (best.sx * 0.5 + 0.5) * window.innerWidth - size / 2;
+      const y = (-best.sy * 0.5 + 0.5) * window.innerHeight - size / 2;
+      elF.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`;
+      elF.style.width = elF.style.height = `${size.toFixed(0)}px`;
+    }
+    elF.classList.toggle('on', !!best);
   }
 
   // ---- travel (brief -> night) and departure (night -> report) ---------------------------------
@@ -365,12 +471,13 @@ export class Game {
     setTimeout(() => {
       this.views.clear();
       this.onUiAction?.('report', this.session.state.report);
-    }, left ? 2600 : 1500);
+    }, this.deathCut ? 1200 : left ? 2600 : 1500);
   }
 
   /** Called by the UI once the report has been read. */
   async afterReport(onProgress) {
     this.departing = null;
+    this.clearDeathCut();
     this.session.toBrief();
     if (this.session.phase === 'over') return 'over';
     this.save.checkpoint(this.session.state.run);
@@ -516,13 +623,32 @@ export class Game {
       this.time += dt;
     }
     const alpha = this.paused ? 1 : this.acc / TICK;
+    if (!this.paused) this.updateDeathCut(dt);
     this.present(alpha, dt);
     this.world.update(this.paused ? 8 : 3);
     this.world.cull(this.camera.position.x, this.camera.position.z);
     this.mats.update(this.time);
     this.views.frame(dt);
+    this.updateFaces();
     for (const sys of this.listeners) sys.frame?.(this, dt, alpha);
     this.composer.render();
+  }
+
+  /** Interference on the helmet feed: some things in the building disturb the camera. */
+  updateGlitch(dt) {
+    let want = 0;
+    const st = this.session?.state;
+    if (st?.phase === 'night') {
+      const p = this.player;
+      for (const c of st.creatures) {
+        const d = Math.hypot(c.x - p.x, c.z - p.z);
+        if (c.type === 'dimmer') want = Math.max(want, Math.max(0, 1 - d / 9) * 0.5);
+        else if (c.type === 'hushwarden' && c.mode === 'hunt') want = Math.max(want, Math.max(0, 1 - d / 12) * 0.2);
+      }
+    }
+    const g = this.glitch || 0;
+    this.glitch = g > want ? Math.max(want, g - dt * 0.8) : want;
+    return this.glitch;
   }
 
   present(alpha, dt) {
@@ -553,7 +679,7 @@ export class Game {
 
     // auto-exposure: meters the scene ahead, hunts a little (a spring that overshoots)
     const l = this.world.lightAt(x - sy * 1.5, 1.4, z - cy * 1.5, this._lit || (this._lit = [0, 0, 0]));
-    const lum = (l[0] * 0.3 + l[1] * 0.55 + l[2] * 0.15) * 2.2;
+    const lum = (l[0] * 0.3 + l[1] * 0.55 + l[2] * 0.15) * 2.2 * this.views.creatures.darkK(x - sy * 1.5, z - cy * 1.5);
     const target = Math.max(0.85, Math.min(3.0, 0.55 / (lum + 0.12)));
     const ex = this.exposure;
     ex.vel += ((target - ex.v) * 7 - ex.vel * 3.2) * Math.min(dt, 0.05);
@@ -564,6 +690,7 @@ export class Game {
     u.uGain.value = Math.max(0, Math.min(1, (ex.v - 0.9) / 2.2));
     u.uTime.value = t;
     u.uFrame.value = (u.uFrame.value + 1) % 4096;
+    u.uGlitch.value = this.deathCut ? this.glitch : this.updateGlitch(dt);
 
     this.fade += (this.fadeTarget - this.fade) * Math.min(1, dt * (this.fadeTarget ? 1.4 : 2.5));
     u.uFade.value = this.fade;
@@ -697,6 +824,30 @@ export class Game {
     }
     this.paused = was;
     this.last = performance.now();
+  }
+
+  /** Screenshot a creature from three sides (front, quarter, far), from spots that can see it. */
+  async debugCreatureShots(id, prefix) {
+    const s = this.session.state.creatures.find((c) => c.id === id || c.type === id);
+    if (!s) return 'no such creature';
+    const out = [];
+    const eye = this.views.creatures.headOf(s.id)?.y || 1.6;
+    for (const [a, d, tag] of [[0, 3.2, 'a'], [1.3, 3.4, 'b'], [2.6, 7, 'c']]) {
+      let spot = null;
+      for (let k = 0; k < 24 && !spot; k++) {
+        const ang = s.yaw + a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.25;
+        const dd = d * (1 - Math.floor(k / 8) * 0.2);
+        const x = s.x - Math.sin(ang) * dd;
+        const z = s.z - Math.cos(ang) * dd;
+        if (this.world.isWalkable(x, z) && this.world.lineOfSight(x, z, s.x, s.z, 1.4)) spot = { x, z };
+      }
+      if (!spot) continue;
+      const yaw = Math.atan2(-(s.x - spot.x), -(s.z - spot.z));
+      const pitch = Math.atan2(eye * 0.7 - 1.6, Math.hypot(s.x - spot.x, s.z - spot.z));
+      this.debugView(spot.x, spot.z, yaw, pitch, { ticks: 0 });
+      out.push(await this.debugSave(`${prefix}-${tag}`));
+    }
+    return out;
   }
 
   /** Run n simulation ticks immediately (tests). */
