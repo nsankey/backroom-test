@@ -577,6 +577,20 @@ const SOUNDS = {
     noiseBurst(ae, out, t, { freq: 2600, q: 0.4, peak: 0.55, a: 0.003, d: 0.9 });
     tone(ae, out, t + 0.85, 1000, 'sine', 0.07, 0.01, 2.6);
   },
+  blast(ae, out, t) {
+    // a CO2 discharge: a hard, cold roar of gas through the horn
+    noiseBurst(ae, out, t, { type: 'highpass', freq: 900, q: 0.5, peak: 0.7, a: 0.01, d: 1.1 });
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 300, peak: 0.35, a: 0.005, d: 0.5 });
+  },
+  beep(ae, out, t, opts = {}) {
+    // the tag gun: a beep and the printer's chatter
+    tone(ae, out, t, opts.low ? 620 : 2100, 'square', 0.045, 0.002, 0.09);
+    if (!opts.low) for (let k = 0; k < 7; k++) noiseBurst(ae, out, t + 0.12 + k * 0.03, { freq: 3800, q: 4, peak: 0.08, d: 0.015 });
+  },
+  lampOut(ae, out, t) {
+    tone(ae, out, t, 180, 'sine', 0.03, 0.005, 0.3);
+    noiseBurst(ae, out, t, { freq: 3000, q: 2, peak: 0.15, d: 0.02 });
+  },
   restock(ae, out, t) {
     noiseBurst(ae, out, t, { type: 'lowpass', freq: 700, peak: 0.25, d: 0.09 });
   },
@@ -779,6 +793,67 @@ const LOOPS = {
     plan();
     const timer = setInterval(plan, 1000);
     return [() => clearInterval(timer), () => o.stop(), () => vib.stop(), () => breath.stop()];
+  },
+  tape(ae, out) {
+    // the foreman's tape: hiss, a man's voice murmuring an inventory (too worn to make out), and
+    // footsteps on concrete, recorded somewhere with a lot of echo
+    const ctx = ae.ctx;
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = ae.noiseBuf;
+    hiss.loop = true;
+    const hf = ctx.createBiquadFilter();
+    hf.type = 'highpass';
+    hf.frequency.value = 4000;
+    const hg = ctx.createGain();
+    hg.gain.value = 0.025;
+    hiss.connect(hf).connect(hg).connect(out);
+    // the voice: band-limited noise shaped by a syllable rhythm, over a low buzz
+    const voice = ctx.createBufferSource();
+    voice.buffer = ae.pinkBuf;
+    voice.loop = true;
+    const vf = ctx.createBiquadFilter();
+    vf.type = 'bandpass';
+    vf.frequency.value = 520;
+    vf.Q.value = 2.5;
+    const vg = ctx.createGain();
+    vg.gain.value = 0;
+    const buzz = ctx.createOscillator();
+    buzz.type = 'sawtooth';
+    buzz.frequency.value = 108;
+    const bf = ctx.createBiquadFilter();
+    bf.type = 'lowpass';
+    bf.frequency.value = 700;
+    buzz.connect(bf).connect(vg);
+    voice.connect(vf).connect(vg);
+    vg.connect(out);
+    hiss.start();
+    voice.start();
+    buzz.start();
+    let at = ctx.currentTime + 0.1;
+    const plan = () => {
+      while (at < ctx.currentTime + 3) {
+        const words = 3 + Math.floor(ae.rng.float(0, 5));
+        for (let k = 0; k < words; k++) {
+          const syl = 1 + Math.floor(ae.rng.float(0, 3));
+          for (let j = 0; j < syl; j++) {
+            vg.gain.setTargetAtTime(0.16, at, 0.015);
+            buzz.frequency.setTargetAtTime(100 + ae.rng.float(0, 30), at, 0.03);
+            vf.frequency.setTargetAtTime(380 + ae.rng.float(0, 500), at, 0.02);
+            at += ae.rng.float(0.09, 0.16);
+            vg.gain.setTargetAtTime(0.02, at, 0.02);
+            at += 0.03;
+          }
+          at += ae.rng.float(0.08, 0.2);
+        }
+        // a pause, with footsteps in it
+        const pause = ae.rng.float(0.8, 1.8);
+        for (let s = 0.2; s < pause; s += 0.55) noiseBurst(ae, out, at + s, { freq: 1300, q: 1, peak: 0.12, d: 0.08 });
+        at += pause;
+      }
+    };
+    plan();
+    const timer = setInterval(plan, 800);
+    return [() => clearInterval(timer), () => hiss.stop(), () => voice.stop(), () => buzz.stop()];
   },
   breath(ae, out) {
     const ctx = ae.ctx;

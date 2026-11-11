@@ -39,10 +39,22 @@ export default {
     const dark = target && (s.pLit < DARK || target.d < DIMMER_R * 0.9);
     if (s.mode === 'recoil') {
       if (target && s.t % 20 === 0) {
-        const ax = s.x - target.p.x;
-        const az = s.z - target.p.z;
-        const l = Math.hypot(ax, az) || 1;
-        pathTo(s, ctx, s.x + (ax / l) * 6, s.z + (az / l) * 6, 1500);
+        // back away from the beam: the first open spot roughly behind it
+        const away = Math.atan2(s.x - target.p.x, s.z - target.p.z);
+        let found = false;
+        for (const [da, r] of [[0, 6], [0.5, 6], [-0.5, 6], [1, 5], [-1, 5], [0, 3.5], [1.6, 4], [-1.6, 4]]) {
+          const x = s.x + Math.sin(away + da) * r;
+          const z = s.z + Math.cos(away + da) * r;
+          if (ctx.world.isWalkable(x, z) && pathTo(s, ctx, x, z, 1500)) {
+            found = true;
+            break;
+          }
+        }
+        // cornered: slip off anywhere further from the beam
+        for (let k = 0; k < 4 && !found; k++) {
+          const p = randomSpot(ctx, s, 'flee' + k);
+          if (p && Math.hypot(p.x - target.p.x, p.z - target.p.z) > target.d + 3) found = pathTo(s, ctx, p.x, p.z, 3000);
+        }
       }
       follow(s, 2.4);
       if (s.burn <= 0) s.mode = 'drift';

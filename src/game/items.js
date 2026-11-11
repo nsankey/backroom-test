@@ -24,10 +24,65 @@ export const ITEMS = {
   urn: { name: 'Canteen tea urn', kind: 'loot', value: [18, 30], kg: 7, slots: 2 },
   carboy: { name: 'Glass carboy', kind: 'loot', value: [34, 58], kg: 16, slots: 2, fragile: true },
   teleprinter: { name: 'Teleprinter', kind: 'loot', value: [45, 72], kg: 24, slots: 2 },
+
+  // ---- tools (requisitioned from the STORES; kept in the van between nights) ----
+  lamp: {
+    name: 'Bull’s-eye lamp',
+    kind: 'tool',
+    price: 20,
+    kg: 1.2,
+    slots: 1,
+    charge: 1,
+    blurb: 'A battery hand lamp with a thick lens. F switches it on while carried. About four minutes of light a night; recharged in the van. Held steady on something that hides in the dark, it drives it back.',
+  },
+  extinguisher: {
+    name: 'CO₂ extinguisher',
+    kind: 'tool',
+    price: 45,
+    kg: 6.5,
+    slots: 1,
+    charge: 4,
+    blurb: 'Four blasts a night. A blast stops anything in front of you within five metres for a few seconds. It is very loud. Refilled in the van.',
+  },
+  pricegun: {
+    name: 'Appraiser’s tag gun',
+    kind: 'tool',
+    price: 30,
+    kg: 0.8,
+    slots: 1,
+    blurb: 'Point it at salvage and pull the trigger: it prints the strongroom’s valuation on a tag and hangs it on the item. It beeps.',
+  },
+  harness: {
+    name: 'Porter’s back frame',
+    kind: 'tool',
+    price: 60,
+    kg: 3,
+    slots: 1,
+    blurb: 'A frame and straps. While you carry it, two-handed salvage takes one slot and the load weighs on you a good deal less.',
+  },
+  recorder: {
+    name: 'The foreman’s recorder',
+    kind: 'tool',
+    price: 35,
+    kg: 1.4,
+    slots: 1,
+    strange: true,
+    blurb: 'Found in a Halvard site office; the stores will not say which. Use it to play the tape: footsteps and a voice reading out an inventory, loud enough to draw a listener to wherever you leave it. It sometimes plays by itself.',
+  },
 };
 
 export const SLOTS = 3;
 export const isLoot = (type) => ITEMS[type]?.kind === 'loot';
+export const isTool = (type) => ITEMS[type]?.kind === 'tool';
+export const TOOL_LIST = Object.keys(ITEMS).filter(isTool);
+
+export const holds = (items, pid, type) => items.some((it) => it.holder === pid && it.type === type);
+
+/** Slots an item of `type` would take for this player (a back frame makes two-handed items one). */
+export function slotsNeeded(items, pid, type) {
+  const n = ITEMS[type].slots;
+  return n > 1 && holds(items, pid, 'harness') ? 1 : n;
+}
 
 /** Total weight carried by a player, from the item list. */
 export function carriedKg(items, pid) {
@@ -36,12 +91,18 @@ export function carriedKg(items, pid) {
   return kg;
 }
 
+/** The weight a player feels (for speed): a back frame takes 45% of the rest off. */
+export function feltKg(items, pid) {
+  const kg = carriedKg(items, pid);
+  return holds(items, pid, 'harness') ? ITEMS.harness.kg + (kg - ITEMS.harness.kg) * 0.55 : kg;
+}
+
 /** Slot occupancy for a player: an array of SLOTS item ids (a 2-slot item fills two). */
 export function slotsOf(items, pid) {
   const out = new Array(SLOTS).fill(null);
   for (const it of items) {
     if (it.holder !== pid) continue;
-    const n = ITEMS[it.type].slots;
+    const n = it.n || ITEMS[it.type].slots;
     for (let k = 0; k < n; k++) if (it.slot + k < SLOTS) out[it.slot + k] = it.id;
   }
   return out;
@@ -237,6 +298,68 @@ export function buildModel(type) {
       add(cyl(0.05, 0.05, 0.5, 12), mat(0x1a1a1a), 0, 0.4, -0.1, 0, 0, Math.PI / 2);
       add(box(0.3, 0.12, 0.004), mat(0xe0dcc8), 0, 0.48, -0.08, -0.2);
       return 0.5;
+    },
+
+    // ---- tools ----
+    lamp() {
+      const body = mat(0x2e3a34);
+      add(box(0.11, 0.13, 0.16), body, 0, 0.065, 0);
+      add(cyl(0.065, 0.065, 0.05, 16), body, 0, 0.075, 0.1, Math.PI / 2);
+      const lens = mat(0xd8d4b8);
+      lens.userData.lens = true;
+      add(cyl(0.055, 0.055, 0.006, 16), lens, 0, 0.075, 0.126, Math.PI / 2); // the lens
+      add(new THREE.TorusGeometry(0.05, 0.01, 6, 12, Math.PI), steel(), 0, 0.13, 0, 0, Math.PI / 2);
+      return 0.19;
+    },
+    extinguisher() {
+      const red = mat(0x8e1e16);
+      add(cyl(0.075, 0.075, 0.5, 14), red, 0, 0.25, 0);
+      add(new THREE.SphereGeometry(0.075, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), red, 0, 0.5, 0);
+      add(cyl(0.02, 0.02, 0.06, 8), dark(), 0, 0.57, 0);
+      add(box(0.03, 0.02, 0.16), steel(), 0, 0.6, -0.04);
+      add(cyl(0.012, 0.012, 0.32, 6), dark(), 0.07, 0.42, 0.02, 0.2, 0, 0.1);
+      add(cyl(0.035, 0.012, 0.1, 10), dark(), 0.09, 0.27, 0.05, Math.PI); // the horn
+      add(box(0.1, 0.12, 0.004), mat(0xd8d0b0), 0, 0.3, 0.076); // the instruction label
+      return 0.62;
+    },
+    pricegun() {
+      const shell = mat(0x9a6a2c);
+      add(box(0.05, 0.08, 0.2), shell, 0, 0.12, 0);
+      add(box(0.045, 0.12, 0.05), dark(), 0, 0.05, 0.06, -0.25);
+      add(box(0.03, 0.03, 0.05), steel(), 0, 0.14, -0.12);
+      add(cyl(0.035, 0.035, 0.045, 12), mat(0xd8d2c0), 0, 0.17, 0.04, 0, 0, Math.PI / 2); // tag roll
+      return 0.2;
+    },
+    harness() {
+      // a porter's pack frame: bent-wood uprights, a canvas back band, padded shoulder straps and
+      // a load shelf at the foot
+      const wood = mat(0x6e5232);
+      const canvas = mat(0x5e5a3e);
+      const strap = mat(0x2a2620);
+      for (const x of [-0.16, 0.16]) {
+        add(box(0.035, 0.42, 0.035), wood, x, 0.23, 0.02, -0.08);
+        add(box(0.035, 0.4, 0.035), wood, x, 0.62, 0, 0.1);
+      }
+      add(box(0.36, 0.035, 0.035), wood, 0, 0.8, -0.02);
+      add(box(0.3, 0.2, 0.01), canvas, 0, 0.55, -0.04, 0.05); // the back band
+      add(box(0.36, 0.03, 0.24), wood, 0, 0.03, 0.12); // the shelf at the foot
+      for (const x of [-0.08, 0.08]) {
+        const s = add(new THREE.TorusGeometry(0.17, 0.022, 6, 14, Math.PI), strap, x, 0.55, -0.06, 0, Math.PI / 2, Math.PI / 2);
+        s.scale.set(1, 1.35, 1);
+      }
+      return 0.82;
+    },
+    recorder() {
+      add(box(0.26, 0.09, 0.19), mat(0x4a3424), 0, 0.045, 0);
+      add(box(0.24, 0.006, 0.17), mat(0x8a8670), 0, 0.093, 0);
+      for (const x of [-0.06, 0.06]) {
+        add(cyl(0.045, 0.045, 0.012, 14), dark(), x, 0.102, -0.015);
+        add(cyl(0.012, 0.012, 0.016, 8), steel(), x, 0.106, -0.015);
+      }
+      add(box(0.18, 0.012, 0.03), mat(0x1a1a1a), 0, 0.1, 0.06);
+      add(cyl(0.008, 0.008, 0.2, 6), steel(), -0.09, 0.2, 0.05, 0.25); // a microphone on a stalk
+      add(new THREE.SphereGeometry(0.022, 10, 8), dark(), -0.09, 0.3, 0.075);
+      return 0.33;
     },
   };
   const fn = MODELS[type];

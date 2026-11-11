@@ -12,7 +12,7 @@ look and sound in docs/STYLE.md. The earlier game's progress log is in git histo
 | 0. Branch, premise, world | done: finite sites, 8 facility kinds, Halvard textures and props |
 | 1. Loop without threats | done: van brief, writs, night clock, loot, carrying, night safe, departure, Instalment, fail screen |
 | 2. Threats | done: four creatures with tells and counterplay, death and drop, signal-lost cut, notices |
-| 3. Tools | not started |
+| 3. Tools | done: five tools from the van's stores, a rack in the van, kept or written off at departure |
 | 4. Co-op (local) | not started |
 
 ## How to run
@@ -70,6 +70,21 @@ Death: everything carried drops where you fall. In co-op the night goes on for t
 the firm bills a recovery fee per lost receiver. Solo, the night ends and the contract with it
 (NOTICE OF SIGNAL LOSS with the run summary).
 
+## Tools
+
+Requisitioned from the STORES tab of the van terminal during the brief (one of each per crew
+member), paid from the ledger, and hung on the rack inside the van. A tool takes a hand slot.
+Tools still in the van (or carried by someone aboard) at departure are kept for the next night;
+tools left in the building are written off on the manifest.
+
+| Tool | ħ | kg | Use (click) | Note |
+| --- | --- | --- | --- | --- |
+| **Bull's-eye lamp** | 20 | 1.2 | F toggles a real spotlight beam | 240 s of battery, browns and stutters when low; held on the Dimmer it burns it back into the dark |
+| **CO₂ extinguisher** | 45 | 6.5 | a loud blast in a 5 m cone | four blasts; stuns the Hushwarden, Stocktaker and Plus-One for 4 s; the Dimmer does not care; the noise carries |
+| **Appraiser's tag gun** | 30 | 0.8 | tags the item you aim at with its valuation | a small beep (noise) |
+| **Porter's back frame** | 60 | 3 | worn, not held | two-handed items take one slot; carried weight feels 55 % as heavy above the frame's own 3 kg |
+| **The foreman's recorder** | 35 | 1.4 | plays 25 s of tape (hiss, a murmur, footsteps) | a lure for the Hushwarden. The downside: while you carry it, it sometimes starts playing by itself |
+
 ## Architecture (decisions and why)
 
 - **Finite sites on the old grid generator.** `src/world/site.js` grows a site per
@@ -82,7 +97,7 @@ the firm bills a recovery fee per lost receiver. Solo, the night ends and the co
 - **Session = the rules, as plain data** (`src/game/session.js`). The run (ledger, Instalment,
   history), the phase, the shift tick, every item (holder, slot, position, value) and each
   player's rule-relevant copy. Changed only by `tick()` and `applyIntent(pid, intent)` with
-  intents `slot / take / drop / deposit / lever / writ`. In co-op the host runs it; clients send
+  intents `slot / take / drop / deposit / lever / writ / noise / buy / lamp / use`. In co-op the host runs it; clients send
   intents. Movement stays client-owned (`stepPlayer`), mirrored into the session each tick.
 - **Everything time-based derives from the shift tick**: clock, brownout (`facilityPower`),
   which bays trip and when (`bankTripMin`, hashed from the site seed), last call. Every client
@@ -136,3 +151,19 @@ the firm bills a recovery fee per lost receiver. Solo, the night ends and the co
   shoulders, a wraparound smoked visor with a highlight).
 - Cost: creature simulation is under 0.05 ms a tick with five creatures; frame time unchanged
   at about 3 ms.
+
+## Step 3 log
+
+- Rules: `buy` and `use` intents; tool state (charge, tag, play) is plain item state, so co-op
+  needs nothing extra. Lamps are a fixed pool of four spotlights in `src/game/toolviews.js` (no
+  shader recompiles); unlit models and the auto-exposure add the beam with `addLamp`.
+- Behaviour checked: the extinguisher stuns a hunting Hushwarden; the recorder at 22 m drew the
+  Hushwarden to within 0.3 m of it; a lamp held on the Dimmer drives it from 5 m to 10 m, then
+  it drifts. Fixed: the tape was too quiet to lure anything (louder); a Dimmer cornered by the
+  beam froze (it now slips off to any spot further from the light).
+- Look pass 1: bought tools were dumped on the van floor (a two-shelf rack); the back frame
+  read as a folding chair (a pack frame with straps, back band and load shelf); the held frame
+  filled the whole view (it is worn, not drawn in the hands).
+- Look pass 2: the extinguisher's cloud read as cotton balls (60 faint puffs that jet, spread
+  and settle); the beam had a hard disc edge (wide penumbra); the lamp's lens was dull while on
+  (it glows).

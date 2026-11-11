@@ -24,7 +24,8 @@ import { Moments } from './moments.js';
 import { Ambience } from './ambience.js';
 import { TICK, TICK_HZ } from './constants.js';
 import { Session, inVan, REACH } from './session.js';
-import { ITEMS, SLOTS, carriedKg, isLoot, fmtH } from './items.js';
+import { ITEMS, SLOTS, carriedKg, feltKg, isLoot, isTool, fmtH } from './items.js';
+import { ToolViews } from './toolviews.js';
 import { spawnLoot } from './loot.js';
 import { facilityPower, bankTripMin, fmtClock, shiftMinutes, ticksAt, LAST_CALL_MIN } from './clock.js';
 import { Views } from './views.js';
@@ -65,6 +66,7 @@ export class Game {
     this.moments = new Moments(this);
     this.momentRng = new RNG(1);
     this.listeners.add(new Ambience(this));
+    this.tools = new ToolViews(this);
     this.views = new Views(this);
     this.world.onCellRemoved = (cell) => this.visited?.delete(cell.key);
     this.fade = 0;
@@ -118,6 +120,7 @@ export class Game {
   async startContract(run, onProgress = () => {}) {
     this.session = new Session(run, { solo: true });
     this.session.addPlayer(this.pid, crewId(run.seed));
+    this.session.stockVan();
     await this.loadBrief(onProgress);
   }
 
@@ -190,6 +193,37 @@ export class Game {
   carriedKg() {
     return this.session ? carriedKg(this.session.state.items, this.pid) : 0;
   }
+  feltKg() {
+    return this.session ? feltKg(this.session.state.items, this.pid) : 0;
+  }
+  activeItem() {
+    const me = this.session && this.localPlayer();
+    return me ? this.localHeld()[me.active] || null : null;
+  }
+
+  /** The loose salvage nearest the middle of the view within `range` (for the tag gun). */
+  aimItem(range = 5.5) {
+    const p = this.player;
+    const fx = -Math.sin(p.yaw) * Math.cos(p.pitch);
+    const fy = Math.sin(p.pitch);
+    const fz = -Math.cos(p.yaw) * Math.cos(p.pitch);
+    let best = null;
+    let bs = 0.97;
+    for (const it of this.session.state.items) {
+      if (it.holder || !isLoot(it.type)) continue;
+      const dx = it.x - p.x;
+      const dy = it.y + 0.12 - p.eye;
+      const dz = it.z - p.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > range) continue;
+      const c = (dx * fx + dy * fy + dz * fz) / d;
+      if (c > bs && this.world.lineOfSight(p.x, p.z, it.x, it.z, 0.6)) {
+        bs = c;
+        best = it;
+      }
+    }
+    return best;
+  }
   get minutes() {
     return this.session ? shiftMinutes(this.session.state.shiftTick) : 0;
   }
@@ -212,7 +246,7 @@ export class Game {
     this.prev.z = p.z;
     this.prev.eye = p.eye;
     this.prev.bob = p.bob;
-    stepPlayer(p, actions, this.world, TICK, events, this.carriedKg());
+    stepPlayer(p, actions, this.world, TICK, events, this.feltKg());
     if (!s) return;
     s.updatePlayer(this.pid, p);
     // footsteps are heard by whatever is listening
@@ -226,6 +260,11 @@ export class Game {
     if (actions.interact && this.nearInteraction) this.interact(this.nearInteraction);
     if (actions.drop) this.dropActive();
     if (actions.map) this.onUiAction?.('map');
+    if (!frozen && actions.lamp) s.applyIntent(this.pid, { type: 'lamp' });
+    if (!frozen && actions.use) {
+      const it = this.activeItem();
+      if (it && isTool(it.type)) s.applyIntent(this.pid, { type: 'use', yaw: p.yaw, pitch: p.pitch, target: it.type === 'pricegun' ? this.aimItem()?.id || null : null });
+    }
 
     // the session's own clock, alarms and departure
     s.tick(this.world);
@@ -345,6 +384,40 @@ export class Game {
         break;
       case 'death':
         if (mine) this.beginDeathCut(e);
+        break;
+      // ---- tools ----
+      case 'lamp':
+        this.audio.play('click', pos);
+        break;
+      case 'lampOut':
+        this.audio.play('lampOut', pos);
+        if (mine) this.ui.caption('The lamp’s battery is flat. It charges in the van.', 3);
+        break;
+      case 'blast':
+        this.audio.play('blast', { x: e.x, y: 1.2, z: e.z }, { ref: 3, wet: 0.6 });
+        this.tools.blast(e);
+        if (mine) this.ui.caption(`${e.hit.length ? 'It stopped. Go.' : 'Nothing there to stop.'} ${e.left} blast${e.left === 1 ? '' : 's'} left.`, 2.5);
+        break;
+      case 'empty':
+        this.audio.play('click', pos);
+        if (mine) this.ui.caption('Empty. It is refilled in the van.', 2);
+        break;
+      case 'tag':
+        this.audio.play('beep', { x: this.player.x, y: 1.2, z: this.player.z });
+        if (mine) this.ui.caption(`${ITEMS[e.itemType].name}: valued at ${fmtH(e.value)}.`, 2.5);
+        break;
+      case 'tagMiss':
+        this.audio.play('beep', pos, { low: true });
+        break;
+      case 'tape':
+        if (e.on) this.audio.play('click', null);
+        if (e.on && e.self && mine) this.ui.caption('The recorder has started playing by itself.', 3);
+        break;
+      case 'bought':
+        this.audio.play('paper');
+        break;
+      case 'buyRefused':
+        if (mine) this.ui.caption(e.why === 'funds' ? 'The ledger will not stand it.' : 'The crew already has one each.', 2.5);
         break;
     }
   }
@@ -550,7 +623,8 @@ export class Game {
     const s = this.session;
     if (it.type === 'item') {
       const d = ITEMS[it.item.type];
-      return `Take ${d.name} · ${d.kg} kg${d.slots > 1 ? ' · both hands' : ''}${d.fragile ? ' · fragile' : ''}`;
+      if (d.kind === 'tool') return `Take ${d.name} · tool${it.item.charge != null ? ` · ${toolCharge(it.item)}` : ''}`;
+      return `Take ${d.name} · ${d.kg} kg${d.slots > 1 ? ' · both hands' : ''}${d.fragile ? ' · fragile' : ''}${it.item.tag ? ` · tagged ${fmtH(it.item.value)}` : ''}`;
     }
     if (it.type === 'chute') {
       const n = this.localHeld().filter((i, k, a) => i && isLoot(i.type) && a.indexOf(i) === k).length;
@@ -628,6 +702,7 @@ export class Game {
     this.world.update(this.paused ? 8 : 3);
     this.world.cull(this.camera.position.x, this.camera.position.z);
     this.mats.update(this.time);
+    this.tools.frame(dt);
     this.views.frame(dt);
     this.updateFaces();
     for (const sys of this.listeners) sys.frame?.(this, dt, alpha);
@@ -679,7 +754,11 @@ export class Game {
 
     // auto-exposure: meters the scene ahead, hunts a little (a spring that overshoots)
     const l = this.world.lightAt(x - sy * 1.5, 1.4, z - cy * 1.5, this._lit || (this._lit = [0, 0, 0]));
-    const lum = (l[0] * 0.3 + l[1] * 0.55 + l[2] * 0.15) * 2.2 * this.views.creatures.darkK(x - sy * 1.5, z - cy * 1.5);
+    const dk = this.views.creatures.darkK(x - sy * 1.5, z - cy * 1.5);
+    for (let k = 0; k < 3; k++) l[k] *= dk;
+    // your own lamp lights what the camera meters (sampled where the beam lands)
+    this.tools.addLamp(x - sy * 2.5, eye + Math.sin(p.pitch) * 2.5 - 0.2, z - cy * 2.5, l);
+    const lum = (l[0] * 0.3 + l[1] * 0.55 + l[2] * 0.15) * 2.2;
     const target = Math.max(0.85, Math.min(3.0, 0.55 / (lum + 0.12)));
     const ex = this.exposure;
     ex.vel += ((target - ex.v) * 7 - ex.vel * 3.2) * Math.min(dt, 0.05);
@@ -736,8 +815,9 @@ export class Game {
       ledger: run.ledger,
       target: run.instalment.target,
       due: run.instalment.due,
-      slots: held.map((it, k) => ({ name: it ? ITEMS[it.type].name : '', cont: !!it && k > 0 && held[k - 1] === it, active: k === me.active })),
+      slots: held.map((it, k) => ({ name: it ? ITEMS[it.type].name + (it.charge != null ? ` · ${toolCharge(it)}` : '') + (it.play > 0 ? ' · PLAYING' : '') + (it.type === 'lamp' && me.lamp ? ' · ON' : '') : '', cont: !!it && k > 0 && held[k - 1] === it, active: k === me.active })),
       kg: this.carriedKg(),
+      felt: this.feltKg(),
       prompt: this.nearInteraction && !this.paused ? this.nearInteraction.prompt : '',
       site: st.site ? SITES[st.site.siteId] : SITES[run.siteId],
       aboard: inVan(this.player.x, this.player.z),
@@ -769,8 +849,11 @@ export class Game {
     p.vx = p.vz = 0;
     this.roll = 0;
     this.exposure.vel = 0;
+    this.present(1, 1 / 30);
+    this.tools.frame(1 / 60);
     for (let k = 0; k < 40; k++) this.present(1, 1 / 30); // let the exposure settle
     this.world.cull(this.camera.position.x, this.camera.position.z);
+    this.tools.frame(1 / 60);
     this.views.frame(1 / 60);
     this.mats.update(this.time);
     this.composer.render();
@@ -881,6 +964,13 @@ export class Game {
     this.renderer.getDrawingBufferSize(size);
     return { msPerFrame: +ms.toFixed(2), fps: +(1000 / ms).toFixed(0), buffer: `${size.x}x${size.y}`, calls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles };
   }
+}
+
+/** A tool's state for the HUD: a lamp's battery, an extinguisher's blasts. */
+function toolCharge(it) {
+  if (it.type === 'lamp') return `${Math.round(it.charge * 100)}%`;
+  if (it.type === 'extinguisher') return `${it.charge}/${ITEMS.extinguisher.charge}`;
+  return '';
 }
 
 /**

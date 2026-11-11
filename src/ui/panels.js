@@ -5,7 +5,7 @@
 import { SITE_LIST, SITES } from '../world/site.js';
 import { KINDS } from '../world/kinds/index.js';
 import { CELL, N } from '../world/constants.js';
-import { ITEMS, fmtH } from '../game/items.js';
+import { ITEMS, TOOL_LIST, fmtH } from '../game/items.js';
 import { fmtClock } from '../game/clock.js';
 import { CAUSE_TEXT } from '../creatures/index.js';
 
@@ -47,7 +47,7 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
   const run = s.run;
   const brief = s.phase === 'brief';
   tab = tab || (brief ? 'writs' : 'ledger');
-  const tabs = (brief ? ['writs', 'notices', 'ledger'] : ['ledger', 'site', 'notices']).map((t) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${t.toUpperCase()}</button>`).join('');
+  const tabs = (brief ? ['writs', 'stores', 'notices', 'ledger'] : ['ledger', 'site', 'notices']).map((t) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${t.toUpperCase()}</button>`).join('');
   let body = '';
   if (tab === 'writs') {
     body =
@@ -71,6 +71,18 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
       ${tonight}
       <table><tr><th>NIGHT</th><th>WRIT</th><th class="v">BANKED</th><th class="v">FEES</th></tr>${rows || '<tr><td colspan="4" class="muted">No nights worked yet.</td></tr>'}</table>
       <p class="muted">Salvage is valued by the strongroom when it goes down the night safe. Anything still aboard at departure is banked automatically. Overtime after 03:00 is charged at ħ5 per ten minutes.</p>`;
+  } else if (tab === 'stores') {
+    const crew = Object.keys(s.players).length;
+    body =
+      `<p class="muted">Requisition from the firm's stores, charged to your ledger. Tools wait on the starboard rack in the van; whatever you leave in a building is written off. One of each per receiver.</p>` +
+      TOOL_LIST.map((t) => {
+        const d = ITEMS[t];
+        const owned = run.tools.filter((x) => x === t).length;
+        const can = owned < crew && run.ledger >= d.price;
+        return `<div class="writ"><div class="h"><span>${esc(d.name.toUpperCase())}${d.strange ? ' &middot; <span class="bad">UNCATALOGUED</span>' : ''}</span><span>${fmtH(d.price)}</span></div>
+          <div class="b">${esc(d.blurb)}</div>
+          <div class="foot" style="margin-top:6px"><span class="muted">${owned ? `${owned} on the rack` : 'none on the rack'}</span><button data-buy="${t}" ${can ? '' : 'disabled'}>${owned >= crew ? 'Issued' : 'Requisition'}</button></div></div>`;
+      }).join('');
   } else if (tab === 'notices') {
     body =
       `<p class="muted">Standing notices to receivers on Halvard premises. Read before every shift. The firm accepts no liability for receivers who did not.</p>` +
@@ -84,6 +96,11 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
   }
   el.innerHTML = `<div class="term">${head('GRISHOLM & DAUGHTERS · FIELD TERMINAL', `STRONGBOX ${game.hud().crew} · NIGHT ${run.night}`)}<div class="tabs">${tabs}</div>${body}</div>`;
   for (const b of el.querySelectorAll('[data-tab]')) b.addEventListener('click', () => terminalPanel(el, game, { onIntent, tab: b.dataset.tab }));
+  for (const b of el.querySelectorAll('[data-buy]'))
+    b.addEventListener('click', () => {
+      onIntent({ type: 'buy', tool: b.dataset.buy });
+      terminalPanel(el, game, { onIntent, tab: 'stores' });
+    });
   for (const w of el.querySelectorAll('[data-writ]'))
     w.addEventListener('click', () => {
       onIntent({ type: 'writ', siteId: w.dataset.writ });
@@ -191,7 +208,9 @@ export function reportPanel(el, report, run, { onContinue }) {
     .map((i) => `<tr><td>${esc(ITEMS[i.type].name)}${i.dropped ? ' <span class="muted">(damaged)</span>' : ''}</td><td class="v">${fmtH(i.value)}</td></tr>`)
     .join('');
   const fees = report.fees.map((f) => `<tr><td>${esc(f.what)}</td><td class="v bad">-${fmtH(f.v)}</td></tr>`).join('');
-  const lost = report.lost.length ? `<tr><td class="bad">Lost with the crew left behind: ${report.lost.map((l) => esc(ITEMS[l.type].name)).join(', ')}</td><td></td></tr>` : '';
+  const lost =
+    (report.lost.length ? `<tr><td class="bad">Lost with the crew left behind: ${report.lost.map((l) => esc(ITEMS[l.type].name)).join(', ')}</td><td></td></tr>` : '') +
+    (report.toolsLost?.length ? `<tr><td class="bad">Tools written off (left in the building): ${report.toolsLost.map((t) => esc(ITEMS[t].name)).join(', ')}</td><td></td></tr>` : '');
   const how =
     report.reason === 'wiped'
       ? `Signal lost from every helmet by ${fmtClock(Math.max(...report.dead.map((d) => d.min ?? report.departed)))}. The Strongbox returned on its governor, empty-cabbed.`

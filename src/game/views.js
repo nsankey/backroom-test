@@ -81,26 +81,38 @@ export class Views {
         g.scene.add(v.model.object);
         this.items.set(it.id, v);
       }
-      if (v.key !== key || (this.creatures.dark.w > 0 && g.tick % 6 === 0)) {
+      const lampNear = g.tools.anyLamp && Math.abs(it.x - g.player.x) + Math.abs(it.z - g.player.z) < 20;
+      if (it.tag && !v.tag) {
+        g.tools.tagFor(v, it);
+        v.key = ''; // relight it with its new tag
+      }
+      if (v.key !== key || ((this.creatures.dark.w > 0 || lampNear || v.lampLit) && g.tick % 3 === 0)) {
         v.model.object.position.set(it.x, it.y, it.z);
         v.model.object.rotation.set(0, it.yaw, 0);
         g.world.lightAt(it.x, it.y + 0.3, it.z, _light);
         const dk = this.creatures.darkK(it.x, it.z);
         for (let k = 0; k < 3; k++) _light[k] *= dk;
+        const before = _light[0] + _light[1];
+        g.tools.addLamp(it.x, it.y + 0.15, it.z, _light);
+        v.lampLit = _light[0] + _light[1] > before + 0.001;
         v.model.setLight(_light, 1.1);
+        if (v.tag) {
+          const t = Math.min(1, 0.08 + Math.max(_light[0], _light[1], _light[2]) * 1.6);
+          v.tag.material.color.setRGB(t, t, t);
+        }
         v.key = key;
       }
     }
     for (const [id, v] of this.items) {
       if (seen.has(id)) continue;
-      g.scene.remove(v.model.object);
-      v.model.dispose();
+      this.disposeItem(v);
       this.items.delete(id);
     }
 
     // the active item in the local player's hands
     const held = g.localHeld();
-    const active = held[g.localPlayer().active] || null;
+    let active = held[g.localPlayer().active] || null;
+    if (active?.type === 'harness') active = null; // worn on the back, not carried in the hands
     if ((active?.id || null) !== (this.hand?.id || null)) {
       if (this.hand) {
         this.handGroup.remove(this.hand.model.object);
@@ -124,7 +136,10 @@ export class Views {
     if (this.hand) {
       const p = g.player;
       g.world.lightAt(p.x, 1.2, p.z, _light);
+      if (g.tools.anyLamp) for (let k = 0; k < 3; k++) _light[k] += 0.08; // spill from your own lamp
       this.hand.model.setLight(_light, 1.3);
+      // a lit lamp's lens burns white
+      if (g.localPlayer().lamp) for (const m of this.hand.model.mats) if (m.userData.lens) m.color.setRGB(3, 2.7, 2.1);
       // sway with the walk, sag under weight
       const bob = p.bob || 0;
       const sag = Math.min(0.08, g.carriedKg() / 300);
@@ -132,12 +147,19 @@ export class Views {
     }
   }
 
-  clear() {
-    for (const v of this.items.values()) {
-      this.game.scene.remove(v.model.object);
-      v.model.dispose();
+  disposeItem(v) {
+    this.game.scene.remove(v.model.object);
+    v.model.dispose();
+    if (v.tag) {
+      v.tag.material.map.dispose();
+      v.tag.material.dispose();
     }
+  }
+
+  clear() {
+    for (const v of this.items.values()) this.disposeItem(v);
     this.items.clear();
     this.creatures.clear();
+    this.game.tools.clear();
   }
 }

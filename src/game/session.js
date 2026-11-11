@@ -3,7 +3,7 @@
 // by tick() and applyIntent(pid, intent). In co-op the host runs it and the others mirror it.
 // No three.js, no DOM.
 
-import { ITEMS, SLOTS, isLoot, freeSlot, slotsOf } from './items.js';
+import { ITEMS, SLOTS, isLoot, isTool, freeSlot, slotsOf, slotsNeeded } from './items.js';
 import { closeNight, bank } from './run.js';
 import { shiftMinutes, SHIFT_MIN, LAST_CALL_MIN, overtimeFee } from './clock.js';
 import { VAN } from '../world/kinds/yard.js';
@@ -14,12 +14,20 @@ import { CREATURES, nightSchedule } from '../creatures/index.js';
 import { spawnSpot, roll } from '../creatures/common.js';
 import { ALONE_LIMIT } from '../creatures/plusOne.js';
 import { siteValueK } from './run.js';
-import { RNG, hash } from '../core/rng.js';
+import { RNG, hash, hashFloat } from '../core/rng.js';
 
 export const REACH = 2.3;
 const LEVER_CONFIRM_TICKS = TICK_HZ * 4;
 // how loud things are (0..1), for anything listening
-export const LOUD = { setDown: 0.3, thud: 0.75, smash: 1.0 };
+export const LOUD = { setDown: 0.3, thud: 0.75, smash: 1.0, blast: 1.0, beep: 0.25, tape: 1.4 }; // the tape is played loud, to carry
+const LAMP_SECONDS = 240; // a full battery
+const BLAST_R = 5;
+const TAPE_TICKS = 25 * TICK_HZ;
+// places on the van's tool rack (props.toolRack at x 11.5, z 9.9 to 11.1)
+const RACK = [
+  ...[10.02, 10.26, 10.5, 10.74, 10.98].map((z) => ({ x: 11.3, y: 0.575, z })),
+  ...[10.02, 10.26, 10.5, 10.74, 10.98].map((z) => ({ x: 11.38, y: 1.268, z })),
+];
 
 export { inVan };
 
@@ -123,8 +131,167 @@ export class Session {
         st.run.siteId = intent.siteId;
         this.emit({ type: 'writ', siteId: intent.siteId });
         return true;
+      case 'buy':
+        return this.buy(p, intent.tool);
+      case 'lamp':
+        return this.toggleLamp(p);
+      case 'use':
+        return this.use(p, intent);
     }
     return false;
+  }
+
+  // ---- tools -------------------------------------------------------------------------------------
+
+  /** Lay the crew's tools out on the van's starboard rack, charged and refilled. */
+  stockVan() {
+    const st = this.state;
+    const held = st.items.filter((i) => isTool(i.type) && i.holder);
+    st.items = st.items.filter((i) => !isTool(i.type) || i.holder);
+    const seen = {};
+    let slot = 0;
+    for (const type of st.run.tools) {
+      const k = (seen[type] = (seen[type] || 0) + 1) - 1;
+      const id = `tool:${type}:${k}`;
+      const it = held.find((i) => i.id === id);
+      if (it) {
+        it.charge = ITEMS[type].charge ?? null;
+        continue;
+      }
+      // the mesh rack on the starboard wall: five places on the lower shelf, five above, then the floor
+      const p = RACK[slot] || { x: 11.0, y: 0, z: 8.5 + (slot - RACK.length) * 0.45 };
+      slot++;
+      st.items.push({ id, type, value: 0, x: p.x, y: p.y, z: p.z, yaw: -Math.PI / 2, holder: null, slot: 0, dropped: 0, charge: ITEMS[type].charge ?? null, play: 0 });
+    }
+  }
+
+  buy(p, type) {
+    const st = this.state;
+    const run = st.run;
+    const d = ITEMS[type];
+    if (st.phase !== 'brief' || !d || d.kind !== 'tool') return false;
+    const crew = Object.keys(st.players).length;
+    const owned = run.tools.filter((t) => t === type).length;
+    if (owned >= crew || run.ledger < d.price) {
+      this.emit({ type: 'buyRefused', pid: p.pid, tool: type, why: owned >= crew ? 'enough' : 'funds' });
+      return false;
+    }
+    run.ledger -= d.price;
+    run.tools.push(type);
+    run.spent = (run.spent || 0) + d.price;
+    this.stockVan();
+    this.emit({ type: 'bought', pid: p.pid, tool: type, price: d.price });
+    return true;
+  }
+
+  heldTool(p, type) {
+    return this.state.items.find((i) => i.holder === p.pid && i.type === type) || null;
+  }
+
+  toggleLamp(p) {
+    const lamp = this.heldTool(p, 'lamp');
+    const on = !p.lamp && !!lamp && lamp.charge > 0 && p.alive;
+    if (on === p.lamp) return false;
+    p.lamp = on;
+    this.emit({ type: 'lamp', pid: p.pid, on, x: p.x, z: p.z });
+    return true;
+  }
+
+  /** Use the tool in the active slot. intent: { yaw, pitch, target } (target: an item id). */
+  use(p, { yaw = p.yaw, pitch = 0, target = null } = {}) {
+    const st = this.state;
+    if (!p.alive) return false;
+    const it = st.items.find((i) => i.id === slotsOf(st.items, p.pid)[p.active]);
+    if (!it || !isTool(it.type)) return false;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    switch (it.type) {
+      case 'lamp':
+        return this.toggleLamp(p);
+      case 'extinguisher': {
+        if (!(it.charge > 0)) {
+          this.emit({ type: 'empty', pid: p.pid, tool: it.type, x: p.x, z: p.z });
+          return false;
+        }
+        it.charge--;
+        const hit = [];
+        for (const c of st.creatures) {
+          if (c.type === 'dimmer') continue; // there is nothing there for it to hit
+          const dx = c.x - p.x;
+          const dz = c.z - p.z;
+          const d = Math.hypot(dx, dz);
+          if (d > BLAST_R || (d > 0.8 && (dx * fx + dz * fz) / d < 0.82)) continue;
+          if (this._world && !this._world.lineOfSight(p.x, p.z, c.x, c.z, 1.0)) continue;
+          c.stun = 4 * TICK_HZ;
+          hit.push(c.id);
+        }
+        this.noise(p.x, p.z, LOUD.blast, p.pid);
+        this.emit({ type: 'blast', pid: p.pid, x: p.x, z: p.z, yaw, pitch, hit, left: it.charge });
+        return true;
+      }
+      case 'pricegun': {
+        const t = st.items.find((i) => i.id === target);
+        this.noise(p.x, p.z, LOUD.beep, p.pid);
+        if (!t || !isLoot(t.type) || t.holder || Math.hypot(t.x - p.x, t.z - p.z) > 5.5) {
+          this.emit({ type: 'tagMiss', pid: p.pid, x: p.x, z: p.z });
+          return false;
+        }
+        t.tag = true;
+        this.emit({ type: 'tag', pid: p.pid, id: t.id, value: t.value, itemType: t.type, x: t.x, z: t.z });
+        return true;
+      }
+      case 'recorder':
+        if (it.play > 0) return false;
+        it.play = TAPE_TICKS;
+        this.emit({ type: 'tape', id: it.id, on: true, pid: p.pid });
+        return true;
+    }
+    return false;
+  }
+
+  /** Lamps drain and burn; the recorder plays (and sometimes starts by itself). */
+  tickTools() {
+    const st = this.state;
+    const night = st.phase === 'night';
+    for (const p of Object.values(st.players)) {
+      if (!p.lamp) continue;
+      const lamp = this.heldTool(p, 'lamp');
+      if (!lamp || !p.alive || lamp.charge <= 0) {
+        p.lamp = false;
+        if (lamp && lamp.charge <= 0) this.emit({ type: 'lampOut', pid: p.pid, x: p.x, z: p.z });
+        continue;
+      }
+      if (!night) continue;
+      let burn = false;
+      const fx = -Math.sin(p.yaw);
+      const fz = -Math.cos(p.yaw);
+      for (const c of st.creatures) {
+        if (c.type !== 'dimmer') continue;
+        const dx = c.x - p.x;
+        const dz = c.z - p.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 9 || (dx * fx + dz * fz) / (d || 1) < 0.93) continue;
+        if (this._world && !this._world.lineOfSight(p.x, p.z, c.x, c.z, 1.4)) continue;
+        c.burn = 45;
+        burn = true;
+      }
+      lamp.charge = Math.max(0, lamp.charge - (burn ? 2.5 : 1) / (LAMP_SECONDS * TICK_HZ));
+    }
+    for (const it of st.items) {
+      if (it.type !== 'recorder') continue;
+      const holder = it.holder ? st.players[it.holder] : null;
+      if (it.play > 0) {
+        it.play--;
+        const x = holder ? holder.x : it.x;
+        const z = holder ? holder.z : it.z;
+        if (night && it.play % 90 === 0) this.noise(x, z, LOUD.tape, null);
+        if (it.play === 0) this.emit({ type: 'tape', id: it.id, on: false });
+      } else if (night && holder && holder.alive && st.tick % (40 * TICK_HZ) === 0 && hashFloat(st.site?.worldSeed || 0, it.id, st.tick) < 0.3) {
+        // it starts by itself, in your hands
+        it.play = 12 * TICK_HZ;
+        this.emit({ type: 'tape', id: it.id, on: true, self: true, pid: holder.pid });
+      }
+    }
   }
 
   take(p, id) {
@@ -133,7 +300,7 @@ export class Session {
     const it = st.items.find((i) => i.id === id);
     if (!it || it.holder) return false;
     if (Math.hypot(it.x - p.x, it.z - p.z) > REACH) return false;
-    const n = ITEMS[it.type].slots;
+    const n = slotsNeeded(st.items, p.pid, it.type);
     const slot = freeSlot(st.items, p.pid, n, p.active);
     if (slot < 0) {
       this.emit({ type: 'full', pid: p.pid, need: n });
@@ -141,6 +308,7 @@ export class Session {
     }
     it.holder = p.pid;
     it.slot = slot;
+    it.n = n;
     p.active = slot;
     this.emit({ type: 'take', pid: p.pid, id, itemType: it.type, x: it.x, y: it.y, z: it.z });
     return true;
@@ -154,6 +322,8 @@ export class Session {
     if (!it || it.holder !== p.pid) return false;
     if (Math.hypot(x - p.x, z - p.z) > REACH) return false;
     it.holder = null;
+    it.n = 0;
+    if (it.type === 'lamp' && p.lamp && !this.heldTool(p, 'lamp')) p.lamp = false;
     it.x = x;
     it.y = y;
     it.z = z;
@@ -221,7 +391,7 @@ export class Session {
   beginNight(site, items) {
     const st = this.state;
     st.site = site;
-    st.items = items;
+    st.items = [...st.items.filter((i) => isTool(i.type)), ...items]; // the tools come along
     st.phase = 'night';
     st.shiftTick = 0;
     st.lever = -1;
@@ -243,6 +413,8 @@ export class Session {
   tick(world = null) {
     const st = this.state;
     st.tick++;
+    if (world) this._world = world;
+    this.tickTools();
     if (st.phase !== 'night') {
       this.noises.length = 0;
       return;
@@ -312,7 +484,15 @@ export class Session {
         if (spot) this.spawn('plusOne', ctx, { ...spot, pid: p.pid });
       }
     }
-    for (const s of st.creatures) CREATURES[s.type].tick(s, ctx);
+    for (const s of st.creatures) {
+      if (s.stun > 0) {
+        // knocked back by an extinguisher blast: it stands, blind and deaf, for a moment
+        s.stun--;
+        s.moving = 0;
+        continue;
+      }
+      CREATURES[s.type].tick(s, ctx);
+    }
     const gone = st.creatures.filter((s) => s.gone);
     if (gone.length) {
       st.creatures = st.creatures.filter((s) => !s.gone);
@@ -387,12 +567,14 @@ export class Session {
     const p = st.players[pid];
     if (!p || !p.alive || st.phase !== 'night') return;
     p.alive = false;
+    p.lamp = false;
     st.dead.push({ pid, cause, min: this.minutes });
     let k = 0;
     for (const it of st.items) {
       if (it.holder !== pid) continue;
       const a = k++ * 2.1;
       it.holder = null;
+      it.n = 0;
       it.x = +(p.x + Math.cos(a) * 0.35).toFixed(3);
       it.z = +(p.z + Math.sin(a) * 0.35).toFixed(3);
       it.y = 0;
@@ -414,7 +596,18 @@ export class Session {
     const aboard = new Set(players.filter((q) => q.alive && inVan(q.x, q.z)).map((q) => q.pid));
     const leftBehind = players.filter((q) => q.alive && !aboard.has(q.pid)).map((q) => q.pid);
     const lost = [];
+    const toolsLost = [];
     for (const it of st.items) {
+      if (isTool(it.type)) {
+        // tools aboard stay with the van; tools left in the building are written off
+        const kept = (it.holder && aboard.has(it.holder)) || (!it.holder && inVan(it.x, it.z));
+        if (!kept) {
+          toolsLost.push(it.type);
+          const k = st.run.tools.indexOf(it.type);
+          if (k >= 0) st.run.tools.splice(k, 1);
+        }
+        continue;
+      }
       if (!isLoot(it.type)) continue;
       if ((it.holder && aboard.has(it.holder)) || (!it.holder && inVan(it.x, it.z))) this.bankItem(it);
       else if (it.holder) lost.push({ type: it.type, value: it.value });
@@ -430,7 +623,9 @@ export class Session {
     st.creatures = [];
     summary.leftBehind = leftBehind;
     summary.lost = lost;
+    summary.toolsLost = toolsLost;
     summary.departed = min;
+    for (const p of players) p.lamp = false;
     st.report = summary;
     st.items = [];
     st.phase = 'report';
@@ -448,6 +643,7 @@ export class Session {
     st.shiftTick = 0;
     st.report = null;
     for (const p of Object.values(st.players)) p.alive = true;
+    this.stockVan();
   }
 
   // ---- views for the HUD -------------------------------------------------------------------------

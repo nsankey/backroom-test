@@ -419,6 +419,7 @@ export class CreatureViews {
       _l[0] *= k;
       _l[1] *= k;
       _l[2] *= k;
+      g.tools.addLamp(o.position.x, m.eye * 0.6, o.position.z, _l);
       lightMats(m.mats, _l, 1.25, 0.03);
     }
     this.sound(v, s);

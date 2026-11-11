@@ -47,8 +47,10 @@ export class UI {
       .join('');
     this.set('slots', $('#hud-slots'), slots);
     const kg = h.kg;
-    this.set('kg', $('#hud-kg'), kg > 0.05 ? `${kg.toFixed(1)} KG${kg > 25 ? ' · TOO HEAVY TO RUN' : ''}` : '');
-    $('#hud-kg').classList.toggle('heavy', kg > 25);
+    const felt = h.felt ?? kg;
+    const frame = felt < kg - 0.05 ? ` (FRAME: FEELS ${felt.toFixed(1)})` : '';
+    this.set('kg', $('#hud-kg'), kg > 0.05 ? `${kg.toFixed(1)} KG${frame}${felt > 25 ? ' · TOO HEAVY TO RUN' : ''}` : '');
+    $('#hud-kg').classList.toggle('heavy', felt > 25);
     this.setPrompt(h.prompt);
   }
 
