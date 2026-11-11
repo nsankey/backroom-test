@@ -291,11 +291,15 @@ export class SceneBuilder {
         this.buf(fm).idx.push(a, d, c, a, c, bq);
         const cm = zone.ceilMat;
         const h = zone.ceil;
-        const a2 = gridVert(cm, i, j, h, -1);
-        const b2 = gridVert(cm, i + 1, j, h, -1);
-        const c2 = gridVert(cm, i + 1, j + 1, h, -1);
-        const d2 = gridVert(cm, i, j + 1, h, -1);
-        this.buf(cm).idx.push(a2, c2, d2, a2, b2, c2);
+        if (!zone.sky) {
+          const a2 = gridVert(cm, i, j, h, -1);
+          const b2 = gridVert(cm, i + 1, j, h, -1);
+          const c2 = gridVert(cm, i + 1, j + 1, h, -1);
+          const d2 = gridVert(cm, i, j + 1, h, -1);
+          this.buf(cm).idx.push(a2, c2, d2, a2, b2, c2);
+        }
+        // open-air zones only build their walls up to wallH; there is no ceiling to meet
+        const top = zone.sky ? zone.wallH || 2.6 : h;
         // walls and soffits on each side
         for (const [di, dj] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
           const ni = i + di;
@@ -303,13 +307,16 @@ export class SceneBuilder {
           // a boundary doorway carries on into the neighbouring place: no wall across its end
           if (zone.boundary && !p.inside(ni, nj)) continue;
           let y0;
-          if (!p.isFloor(ni, nj)) y0 = 0;
-          else {
+          if (!p.isFloor(ni, nj)) {
+            // outdoors, a mass the kind draws itself (the van's body) needs no wall from the yard
+            if (zone.sky && p.inside(ni, nj) && p.noFace[p.idx(ni, nj)]) continue;
+            y0 = 0;
+          } else {
             const nc = p.ceilAt(ni, nj);
-            if (nc >= h - 0.001) continue;
+            if (nc >= top - 0.001) continue;
             y0 = nc;
           }
-          this.wallFace(zone.wall, i, j, di, dj, y0, h, y0 === 0 && !zone.door);
+          this.wallFace(zone.wall, i, j, di, dj, y0, top, y0 === 0 && !zone.door && zone.baseboard !== false);
         }
       }
   }
@@ -340,13 +347,37 @@ export class SceneBuilder {
   fixtures() {
     for (const l of this.plan.lights) {
       if (!l.fixture) continue;
-      if (l.type === 'troffer') {
-        this.push(l.x, l.z, l.rot || 0);
-        const g = l.color.map((c) => c * 2.0 * Math.min(1.4, l.power / 2.6));
+      const g = l.color.map((c) => c * 2.0 * Math.min(1.4, l.power / 2.6));
+      const dead = l.power <= 0.001; // a fitting that has failed: drawn, dark
+      const glow = dead ? [0.02, 0.02, 0.02] : g;
+      this.push(l.x, l.z, l.rot || 0);
+      const style = l.style || 'troffer';
+      const ceil = l.ceil ?? l.y + 0.03;
+      if (style === 'troffer') {
         this.box('troffer', 0, l.y - 0.015, 0, 1.24, 0.05, 0.64, { skip: 'top', seg: 2 });
-        this.face('lamp', [-0.58, l.y - 0.018, -0.29], [1.16, 0, 0], [0, 0, 0.58], [0, 0], { glow: g, flicker: l.flicker, seg: 2 });
+        this.face('lamp', [-0.58, l.y - 0.018, -0.29], [1.16, 0, 0], [0, 0, 0.58], [0, 0], { glow, flicker: l.flicker, seg: 2 });
+      } else if (style === 'batten') {
+        // a bare tube on a steel channel, hung on two rods
+        const y = l.y;
+        for (const sx of [-0.5, 0.5]) this.box('steelDark', sx, y + 0.05, 0, 0.012, ceil - y - 0.05, 0.012);
+        this.box('steelPaint', 0, y + 0.02, 0, 1.5, 0.05, 0.09, { seg: 2 });
+        // a laid-down cylinder runs along local +z: turn the frame so the tube runs along x
+        this.push(0, 0, Math.PI / 2);
+        this.cyl('lamp', 0, y, -0.72, 0.02, 1.44, { segs: 6, rx: true, glow, flicker: l.flicker, noCap: true });
         this.pop();
+      } else if (style === 'highbay') {
+        // an industrial dome on a drop rod: enamel shade, glowing lens underneath
+        const y = l.y;
+        this.cyl('steelDark', 0, y + 0.3, 0, 0.012, ceil - y - 0.3, { segs: 4, noCap: true });
+        this.cyl('enamelGreen', 0, y, 0, 0.32, 0.26, { r1: 0.09, segs: 14, noCap: true });
+        this.cyl('steelDark', 0, y + 0.24, 0, 0.1, 0.1, { r1: 0.07, segs: 10 });
+        this.cyl('lamp', 0, y + 0.03, 0, 0.27, 0.004, { segs: 14, glow, flicker: l.flicker });
+      } else if (style === 'sealed') {
+        // a cold-room bulkhead: a white box with a frosted lens, flush to the ceiling
+        this.box('panelWhite', 0, l.y - 0.02, 0, 1.3, 0.1, 0.22, { skip: 'top', seg: 2 });
+        this.face('lamp', [-0.6, l.y - 0.023, -0.08], [1.2, 0, 0], [0, 0, 0.16], [0, 0], { glow: glow.map((c) => c * 0.9), flicker: l.flicker, seg: 2 });
       }
+      this.pop();
     }
   }
 
@@ -437,7 +468,7 @@ export class SceneBuilder {
           let ndl = (nx * dx + ny * dy + nz * dz) / (d || 1);
           ndl = Math.max(0, ndl);
           let lobe = 1;
-          if (l.type === 'troffer') lobe = Math.pow(Math.max(0, dy / (d || 1)), 1.3) * 0.97 + 0.03;
+          if (l.type === 'troffer') lobe = Math.pow(Math.max(0, dy / (d || 1)), l.lobe ?? 1.3) * 0.97 + 0.03;
           else if (l.type === 'spotDown') lobe = Math.pow(Math.max(0, dy / (d || 1)), 3);
           const direct = vis ? (l.power * lobe * ndl) / (d2 + 0.35) : 0;
           // fake bounce: a soft, wide fill, weaker on ceilings (they get little bounced light)

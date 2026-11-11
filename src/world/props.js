@@ -9,319 +9,59 @@ function legs(b, mat, w, d, h, inset = 0.04, r = 0.018) {
     b.cyl(mat, sx * (w / 2 - inset), 0, sz * (d / 2 - inset), r, h, { segs: 6, noCap: true });
 }
 
+/** A cardboard carton with a tape strip, slightly irregular. */
+function carton(b, rng, x, y, z, w, h, d) {
+  const rot = rng ? rng.float(-0.06, 0.06) : 0;
+  b.box('cardboard', x, y, z, w, h, d, { rot, seg: 0.5 });
+}
+
 export const PROPS = {
-  chair(b, p) {
-    const m = p.mat || 'vinylOrange';
-    legs(b, 'chrome', 0.62, 0.6, 0.26);
-    b.box(m, 0, 0.26, 0, 0.66, 0.16, 0.62, { seg: 0.35 });
-    b.box(m, 0, 0.42, -0.26, 0.66, 0.42, 0.12, { seg: 0.35 });
-    // tubular chrome arms
-    for (const sx of [-0.35, 0.35]) {
-      b.box('chrome', sx, 0.6, -0.02, 0.035, 0.035, 0.56);
-      b.cyl('chrome', sx, 0.26, 0.24, 0.016, 0.36, { segs: 6, noCap: true });
-    }
-    b.collideBox(0, 0, 0.72, 0.64, 0.8);
-  },
-
-  sofa(b, p) {
-    const m = p.mat || 'vinylOrange';
-    const w = p.w || 1.9;
-    legs(b, 'chrome', w, 0.7, 0.22);
-    b.box(m, 0, 0.22, 0.02, w, 0.2, 0.68, { seg: 0.4 });
-    b.box(m, 0, 0.42, -0.28, w, 0.42, 0.14, { seg: 0.4 });
-    b.box(m, -w / 2 + 0.07, 0.42, 0.02, 0.14, 0.16, 0.66);
-    b.box(m, w / 2 - 0.07, 0.42, 0.02, 0.14, 0.16, 0.66);
-    b.collideBox(0, 0, w + 0.05, 0.75, 0.84);
-  },
-
-  coffeeTable(b, p) {
-    const w = p.w || 1.2;
-    const d = p.d || 0.6;
-    legs(b, 'chrome', w, d, 0.38, 0.06, 0.015);
-    b.box('walnut', 0, 0.38, 0, w, 0.04, d);
-    b.collideBox(0, 0, w, d, 0.42);
-  },
-
-  deskCounter(b, p, rng) {
-    const len = p.len || 3;
-    b.box('blackPlastic', 0, 0, 0.06, len - 0.04, 0.1, 0.62);
-    b.box('walnut', 0, 0.1, 0.33, len, 0.92, 0.06, { seg: 0.4 });
-    b.box('walnut', 0, 0.1, -0.3, len, 0.92, 0.06);
-    b.box('laminate', 0, 1.02, 0.03, len + 0.06, 0.04, 0.78);
-    b.box('laminate', 0, 0.74, -0.15, len - 0.1, 0.03, 0.4);
-    b.collideBox(0, 0, len + 0.06, 0.8, 1.06);
-    if (p.bell !== false) {
-      b.cyl('brass', len * 0.28, 1.06, 0.18, 0.05, 0.015, { segs: 10 });
-      b.cyl('brass', len * 0.28, 1.075, 0.18, 0.04, 0.03, { r1: 0.012, segs: 10 });
-      b.cyl('chrome', len * 0.28, 1.105, 0.18, 0.004, 0.012, { segs: 4 });
-    }
-    // ledger and a pen
-    b.box('paper', -len * 0.2, 1.06, 0.12, 0.42, 0.02, 0.3, { rot: 0.08 });
-    b.box('blackPlastic', -len * 0.2 + 0.1, 1.08, 0.12, 0.13, 0.008, 0.008, { rot: 0.7 });
-    // rotary phone behind the counter
-    b.push(len * 0.38, -0.12, -0.2 + (rng ? rng.float(-0.2, 0.2) : 0), 0);
-    PROPS.phone(b, { y: 1.06 });
-    b.pop();
-  },
-
-  phone(b, p) {
-    const y = p.y || 0;
-    b.box('beigePlastic', 0, y, 0, 0.2, 0.08, 0.22);
-    b.box('beigePlastic', 0, y + 0.08, -0.02, 0.17, 0.03, 0.14);
-    b.cyl('chrome', 0, y + 0.08, 0.06, 0.05, 0.006, { segs: 10 });
-    b.box('beigePlastic', 0, y + 0.11, -0.02, 0.22, 0.04, 0.05);
-  },
-
-  keyBoard(b, p, rng) {
-    // wall-mounted key cabinet, origin on the wall
-    const w = p.w || 1.6;
-    const h = 1.0;
-    const y0 = 1.25;
-    b.box('walnut', 0, y0, 0.03, w, h, 0.06, { seg: 0.4 });
-    const cols = 10;
-    const rows = 4;
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++) {
-        const x = -w / 2 + (w / cols) * (c + 0.5);
-        const y = y0 + h - 0.2 - r * 0.24;
-        b.box('brass', x, y, 0.07, 0.012, 0.012, 0.03);
-        const taken = rng ? rng.chance(0.55) : true;
-        if (taken) {
-          b.box('brass', x, y - 0.075, 0.07, 0.022, 0.065, 0.006);
-          b.box('paperTag', x, y - 0.15, 0.075, 0.038, 0.06, 0.004);
-        }
-      }
-  },
-
-  plant(b, p, rng) {
-    b.cyl('ceramic', 0, 0, 0, 0.2, 0.4, { r1: 0.24, segs: 12 });
-    b.cyl('soil', 0, 0.38, 0, 0.22, 0.01, { segs: 12 });
-    // a rubber plant: a stem with broad flat leaves radiating at different heights
-    b.cyl('walnut', 0, 0.38, 0, 0.018, 0.95, { segs: 5, noCap: true });
-    const n = 16;
-    for (let k = 0; k < n; k++) {
-      const a = k * 2.4 + (rng ? rng.float(0, 0.4) : 0);
-      const y = 0.55 + (k / n) * 0.75;
-      const len = 0.34 - (k / n) * 0.12;
-      b.push(0, 0, a, y);
-      b.box('leaf', 0, 0, len / 2 + 0.02, 0.11, 0.012, len);
-      b.pop();
-    }
-    b.collideBox(0, 0, 0.48, 0.48, 1);
-  },
-
-  ashtray(b) {
-    b.cyl('chrome', 0, 0, 0, 0.14, 0.02, { segs: 10 });
-    b.cyl('chrome', 0, 0.02, 0, 0.025, 0.55, { segs: 8, noCap: true });
-    b.cyl('chrome', 0, 0.57, 0, 0.13, 0.05, { r1: 0.15, segs: 12 });
-    b.cyl('sand', 0, 0.615, 0, 0.13, 0.004, { segs: 12 });
-    b.collideBox(0, 0, 0.3, 0.3, 0.62);
-  },
-
-  clock(b, p) {
-    // wall clock with no hands, origin on the wall
-    const y = p.y || 2.1;
-    b.box('walnut', 0, y - 0.2, 0.02, 0.42, 0.42, 0.04);
-    b.face('clockFace', [-0.18, y - 0.18, 0.041], [0.36, 0, 0], [0, 0.36, 0], [0, 0], { seg: 1, uvRect: [0, 0, 1, 1] });
-  },
-
-  tableLamp(b, p) {
-    const y = p.y || 0;
-    b.cyl('brass', 0, y, 0, 0.08, 0.02, { segs: 10 });
-    b.cyl('brass', 0, y + 0.02, 0, 0.012, 0.32, { segs: 6, noCap: true });
-    b.cyl('shade', 0, y + 0.3, 0, 0.17, 0.2, { r1: 0.11, segs: 12, noCap: true, glow: [0.8, 0.52, 0.28] });
-    b.light({ x: 0, y: y + 0.42, z: 0, color: [1.0, 0.72, 0.42], power: p.power ?? 0.9, range: 5 });
-  },
-
-  pendant(b, p) {
-    // a drum pendant hanging from the ceiling, throwing a pool of warm light downward
-    const ceil = p.ceil || 3;
-    const y = ceil - (p.drop || 0.9);
-    b.cyl('brass', 0, y + 0.22, 0, 0.006, ceil - y - 0.22, { segs: 4, noCap: true });
-    b.cyl('brass', 0, y, 0, 0.24, 0.22, { r1: 0.2, segs: 14, noCap: true });
-    b.cyl('lamp', 0, y + 0.01, 0, 0.22, 0.004, { segs: 14, glow: [1.6, 1.15, 0.7], flicker: !!p.flicker });
-    b.light({ x: 0, y: y - 0.05, z: 0, type: 'spotDown', color: [1.0, 0.78, 0.5], power: p.power ?? 2.2, range: 6, flicker: !!p.flicker });
-    b.light({ x: 0, y: y + 0.1, z: 0, color: [1.0, 0.75, 0.45], power: 0.25, range: 3 });
-  },
-
-  sconce(b, p) {
-    const y = p.y || 1.8;
-    b.box('brass', 0, y - 0.12, 0.01, 0.1, 0.24, 0.02);
-    b.cyl('shade', 0, y - 0.05, 0.11, 0.08, 0.16, { r1: 0.1, segs: 10, glow: [0.75, 0.5, 0.28], flicker: !!p.flicker, noCap: true });
-    b.light({ x: 0, y: y + 0.05, z: 0.2, color: [1.0, 0.7, 0.4], power: p.power ?? 0.7, range: 5, flicker: !!p.flicker });
-  },
-
-  hotelDoor(b, p) {
-    // a closed guest-room door set into the wall, origin on the wall surface
-    const w = 0.92;
-    const h = 2.05;
-    b.box('doorFrame', -w / 2 - 0.04, 0, 0.02, 0.08, h + 0.04, 0.04);
-    b.box('doorFrame', w / 2 + 0.04, 0, 0.02, 0.08, h + 0.04, 0.04);
-    b.box('doorFrame', 0, h, 0.02, w + 0.16, 0.08, 0.04);
-    b.box(p.mat || 'woodDoor', 0, 0, 0.012, w, h, 0.024, { skip: 'nz', seg: 0.5 });
-    b.cyl('brass', w / 2 - 0.1, 0.98, 0.045, 0.028, 0.02, { segs: 8 });
-    b.box('brass', w / 2 - 0.1, 0.94, 0.026, 0.05, 0.12, 0.006);
-    if (p.num) {
-      b.box('brass', 0, 1.52, 0.026, 0.26, 0.12, 0.006);
-      b.digits(String(p.num), 0, 1.545, 0.03, 0.07);
-    }
-    if (p.hanger) b.box('paperTag', w / 2 - 0.1, 0.76, 0.06, 0.09, 0.2, 0.004);
+  // ---- general ----
+  sign(b, p) {
+    const y = p.y || 2.0;
+    const w = p.w || 1.4;
+    const h = p.h || w / 10;
+    if (p.board !== false) b.box(p.boardMat || 'steelDark', 0, y - 0.04, 0.012, w + 0.08, h + 0.08, 0.024);
+    b.sign(p.text, 0, y, p.board !== false ? 0.025 : 0.004, w, h, p.glow ? { glow: p.glow } : {});
   },
 
   exitSign(b, p) {
     const y = p.y || 2.25;
     b.box('beigePlastic', 0, y, 0.06, 0.34, 0.16, 0.1);
     b.push(0, 0.111, 0);
-    b.sign('EXIT', 0, y + 0.02, 0, 0.3, 0.12, { glow: [2.4, 0.25, 0.18] });
+    b.sign('EXIT', 0, y + 0.02, 0, 0.3, 0.12, { glow: [0.3, 1.9, 0.6] });
     b.pop();
-    b.light({ x: 0, y: y + 0.05, z: 0.3, color: [1, 0.12, 0.08], power: 0.12, range: 3 });
+    b.light({ x: 0, y: y + 0.05, z: 0.3, color: [0.2, 1, 0.4], power: 0.1, range: 3 });
   },
 
-  sign(b, p) {
-    const y = p.y || 2.0;
+  desk(b, p, rng) {
     const w = p.w || 1.4;
-    const h = p.h || w / 10;
-    if (p.board !== false) b.box(p.boardMat || 'walnut', 0, y - 0.04, 0.012, w + 0.08, h + 0.08, 0.024);
-    b.sign(p.text, 0, y, p.board !== false ? 0.025 : 0.004, w, h, p.glow ? { glow: p.glow } : {});
-  },
-
-  iceMachine(b) {
-    b.box('stainless', 0, 0, 0, 0.8, 1.55, 0.72, { seg: 0.4 });
-    b.box('blackPlastic', 0, 0.55, 0.36, 0.5, 0.42, 0.02);
-    b.box('stainless', 0, 1.05, 0.37, 0.6, 0.06, 0.04);
-    b.sign('ICE', 0, 1.25, 0.362, 0.4, 0.18, {});
-    b.box('lamp', 0.3, 1.4, 0.362, 0.03, 0.03, 0.005, { glow: [0.1, 1.6, 0.4] });
-    b.light({ x: 0, y: 1.0, z: 0.6, color: [0.6, 0.85, 1.0], power: 0.15, range: 2.5 });
-    b.collideBox(0, 0, 0.82, 0.74, 1.6);
-  },
-
-  vending(b, p) {
-    b.box('vendingBody', 0, 0, 0, 0.95, 1.85, 0.8, { seg: 0.4 });
-    b.face('vendingGlow', [-0.38, 0.55, 0.402], [0.6, 0, 0], [0, 1.15, 0], [0, 0], { glow: [1.4, 1.5, 1.6], seg: 0.4, uvRect: [0, 0, 1, 1], flicker: !!p.flicker });
-    b.box('blackPlastic', 0.33, 0.9, 0.4, 0.18, 0.5, 0.02);
-    b.box('blackPlastic', 0, 0.15, 0.4, 0.6, 0.22, 0.02);
-    b.light({ x: 0, y: 1.1, z: 0.8, color: [0.8, 0.92, 1.0], power: 0.55, range: 4, flicker: !!p.flicker });
-    b.collideBox(0, 0, 0.97, 0.82, 1.9);
-  },
-
-  cart(b) {
-    legs(b, 'chrome', 0.9, 0.55, 0.78, 0.03, 0.012);
-    b.box('stainless', 0, 0.2, 0, 0.88, 0.02, 0.53);
-    b.box('linen', 0, 0.62, 0, 0.94, 0.18, 0.6, { skip: 'bottom' });
-    b.box('linen', 0, 0.78, 0, 0.94, 0.02, 0.6);
-    b.cyl('chrome', 0.15, 0.8, 0, 0.16, 0.14, { r1: 0.05, segs: 12 });
-    b.cyl('ceramic', -0.25, 0.8, 0.1, 0.05, 0.08, { segs: 8 });
-    b.collideBox(0, 0, 0.96, 0.62, 0.95);
-  },
-
-  bed(b, p) {
-    const w = p.w || 1.4;
-    const l = 2.0;
-    b.box('walnut', 0, 0, l / 2, w + 0.06, 0.3, l, { seg: 0.5 });
-    b.box('mattress', 0, 0.3, l / 2, w, 0.2, l - 0.04, { seg: 0.5 });
-    b.box(p.cover || 'fabricFloral', 0, 0.5, l / 2 + 0.2, w + 0.04, 0.05, l - 0.4, { seg: 0.35 });
-    b.box(p.cover || 'fabricFloral', 0, 0.12, l / 2 + 0.2, w + 0.1, 0.43, 0.02, { skip: 'nz' });
-    b.box('linen', -w / 4, 0.5, 0.25, w / 2 - 0.08, 0.12, 0.38);
-    b.box('linen', w / 4, 0.5, 0.25, w / 2 - 0.08, 0.12, 0.38);
-    b.box('walnut', 0, 0, 0.03, w + 0.2, 1.15, 0.06, { seg: 0.4 });
-    b.collideBox(0, l / 2, w + 0.2, l, 0.6);
-  },
-
-  nightstand(b, p) {
-    b.box('walnut', 0, 0, 0, 0.5, 0.55, 0.42);
-    b.box('blackPlastic', 0, 0.38, 0.212, 0.3, 0.02, 0.006);
-    b.collideBox(0, 0, 0.5, 0.42, 0.55);
-    if (p.lamp) {
-      b.push(0, -0.03);
-      PROPS.tableLamp(b, { y: 0.55, power: p.power ?? 0.75 });
+    b.box('laminate', 0, 0.72, 0, w, 0.03, 0.75);
+    b.box('metalGrey', w / 2 - 0.22, 0, 0, 0.4, 0.72, 0.7);
+    for (let k = 0; k < 3; k++) b.box('chrome', w / 2 - 0.22, 0.15 + k * 0.22, 0.352, 0.1, 0.02, 0.01);
+    b.box('metalGrey', -w / 2 + 0.03, 0, 0, 0.04, 0.72, 0.7);
+    b.box('metalGrey', 0, 0.3, -0.34, w - 0.1, 0.4, 0.02);
+    b.collideBox(0, 0, w, 0.76, 0.76);
+    if (p.typewriter) {
+      b.push(-0.15, 0.05, rng ? rng.float(-0.2, 0.2) : 0, 0.75);
+      b.box('steelPaint', 0, 0, 0, 0.44, 0.1, 0.36);
+      b.box('steelPaint', 0, 0.1, -0.08, 0.44, 0.08, 0.2);
+      b.box('rubber', 0, 0.17, -0.1, 0.5, 0.06, 0.06);
+      b.box('blackPlastic', 0, 0.1, 0.1, 0.36, 0.02, 0.12, { rot: 0 });
+      b.box('paper', 0, 0.18, -0.13, 0.22, 0.22, 0.004);
       b.pop();
     }
-  },
-
-  dresser(b, p) {
-    const w = p.w || 1.6;
-    b.box('walnut', 0, 0, 0, w, 0.78, 0.5, { seg: 0.4 });
-    for (let k = 0; k < 3; k++) b.box('blackPlastic', 0, 0.2 + k * 0.22, 0.252, w - 0.3, 0.012, 0.006);
-    b.collideBox(0, 0, w, 0.5, 0.78);
-    if (p.tv) {
-      b.push(p.tvX ?? 0.3, 0, p.tvRot ?? 0, 0.78);
-      PROPS.tv(b, p);
-      b.pop();
-    }
-  },
-
-  tv(b, p) {
-    // a 1970s console set; screen glows with static when p.static
-    b.box('woodVeneer', 0, 0, 0, 0.62, 0.48, 0.45);
-    b.box('blackPlastic', -0.06, 0.06, 0.226, 0.44, 0.36, 0.006);
-    const on = p.static !== false;
-    b.face(on ? 'tvStatic' : 'glass', [-0.25, 0.09, 0.231], [0.38, 0, 0], [0, 0.3, 0], [0, 0], on ? { glow: [0.9, 0.95, 1.05], seg: 1, uvRect: [0, 0, 1, 1] } : { seg: 1 });
-    b.cyl('chrome', 0.22, 0.25, 0.23, 0.018, 0.01, { segs: 8 });
-    b.cyl('chrome', 0.22, 0.15, 0.23, 0.018, 0.01, { segs: 8 });
-    b.push(0, 0, 0.4, 0.48);
-    b.box('chrome', -0.12, 0, 0, 0.008, 0.36, 0.008, { rot: 0.0 });
-    b.pop();
-    if (on) b.light({ x: -0.06, y: 0.25, z: 0.45, color: [0.62, 0.72, 0.95], power: 0.35, range: 3.5, flicker: true });
-  },
-
-  window(b, p) {
-    // blinds drawn over a window that is always lit from outside; origin on the wall
-    const w = p.w || 1.6;
-    const h = p.h || 1.3;
-    const y = p.y || 0.9;
-    b.box('doorFrame', 0, y - 0.06, 0.05, w + 0.12, 0.06, 0.12);
-    b.box('doorFrame', 0, y + h, 0.02, w + 0.12, 0.06, 0.04);
-    b.box('doorFrame', -w / 2 - 0.03, y, 0.02, 0.06, h, 0.04);
-    b.box('doorFrame', w / 2 + 0.03, y, 0.02, 0.06, h, 0.04);
-    b.face('blinds', [-w / 2, y, 0.01], [w, 0, 0], [0, h, 0], [0, 0], { glow: [0.62, 0.66, 0.58], seg: 0.5, uvScale: 1 });
-    // the pull cord and bottom rail
-    b.box('doorFrame', 0, y + 0.02, 0.025, w, 0.03, 0.02);
-    b.box('linen', w / 2 - 0.12, y + 0.1, 0.03, 0.006, h - 0.15, 0.006);
-    b.light({ x: 0, y: y + h / 2, z: 0.35, color: [0.92, 0.95, 0.88], power: (p.power ?? 1) * 1.2, range: 6 });
-  },
-
-  labBed(b) {
-    legs(b, 'chrome', 0.9, 1.95, 0.55, 0.05, 0.02);
-    b.box('chrome', 0, 0.5, 0, 0.92, 0.05, 1.96);
-    b.box('mattress', 0, 0.55, 0, 0.86, 0.14, 1.9, { seg: 0.5 });
-    b.box('linen', 0, 0.69, 0.2, 0.9, 0.03, 1.4, { seg: 0.5 });
-    b.box('linen', 0, 0.69, -0.72, 0.6, 0.1, 0.34);
-    b.box('chrome', -0.47, 0.75, 0.1, 0.02, 0.2, 1.2);
-    b.box('chrome', 0, 0.55, -0.98, 0.9, 0.6, 0.03);
-    b.collideBox(0, 0, 0.96, 2.0, 0.85);
-  },
-
-  eegCart(b, p, rng) {
-    legs(b, 'chrome', 0.6, 0.45, 0.7, 0.03, 0.014);
-    b.box('beigePlastic', 0, 0.7, 0, 0.62, 0.55, 0.47);
-    b.box('blackPlastic', -0.08, 0.9, 0.236, 0.34, 0.26, 0.006);
-    b.face('scope', [-0.23, 0.92, 0.24], [0.3, 0, 0], [0, 0.22, 0], [0, 0], { glow: [0.25, 1.3, 0.55], seg: 1, uvRect: [0, 0, 1, 1] });
-    for (let k = 0; k < 4; k++) b.cyl('blackPlastic', 0.17, 0.8 + k * 0.1, 0.24, 0.022, 0.02, { segs: 8 });
-    const on = rng ? rng.int(0, 3) : 1;
-    for (let k = 0; k < 4; k++) b.box('lamp', -0.22 + k * 0.06, 0.78, 0.236, 0.02, 0.02, 0.004, { glow: k === on ? [2.2, 0.3, 0.2] : [0.15, 0.04, 0.03] });
-    b.light({ x: 0, y: 1.0, z: 0.4, color: [0.4, 1.0, 0.6], power: 0.08, range: 2 });
-    b.collideBox(0, 0, 0.64, 0.5, 1.25);
-  },
-
-  desk(b, p) {
-    const w = p.w || 1.4;
-    b.box('laminate', 0, 0.72, 0, w, 0.04, 0.72);
-    b.box('metalGrey', w / 2 - 0.22, 0, 0, 0.4, 0.72, 0.68);
-    for (let k = 0; k < 3; k++) b.box('chrome', w / 2 - 0.22, 0.15 + k * 0.22, 0.342, 0.1, 0.02, 0.01);
-    b.box('metalGrey', -w / 2 + 0.03, 0, 0, 0.04, 0.72, 0.68);
-    b.box('metalGrey', 0, 0.3, -0.33, w - 0.1, 0.4, 0.02);
-    b.collideBox(0, 0, w, 0.74, 0.76);
     if (p.papers) {
-      b.box('paper', -0.2, 0.76, 0.05, 0.3, 0.02, 0.22, { rot: 0.2 });
-      b.box('paper', 0.05, 0.76, -0.05, 0.22, 0.03, 0.3, { rot: -0.1 });
+      b.box('paper', 0.25, 0.75, 0.05, 0.3, 0.02, 0.22, { rot: 0.2 });
+      b.box('paper', 0.35, 0.77, -0.08, 0.22, 0.03, 0.3, { rot: -0.1 });
     }
   },
 
   officeChair(b) {
     b.cyl('blackPlastic', 0, 0, 0, 0.28, 0.05, { segs: 5 });
     b.cyl('chrome', 0, 0.05, 0, 0.025, 0.35, { segs: 6, noCap: true });
-    b.box('vinylBrown', 0, 0.4, 0, 0.48, 0.08, 0.46);
-    b.box('vinylBrown', 0, 0.55, -0.22, 0.44, 0.45, 0.06);
+    b.box('partition', 0, 0.4, 0, 0.48, 0.08, 0.46);
+    b.box('partition', 0, 0.55, -0.22, 0.44, 0.45, 0.06);
     b.collideBox(0, 0, 0.56, 0.56, 1);
   },
 
@@ -332,284 +72,414 @@ export const PROPS = {
   },
 
   shelf(b, p, rng) {
+    // steel shelving with boxes and files
     const w = p.w || 1.2;
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box('metalGrey', sx * (w / 2 - 0.02), 0, sz * 0.18, 0.03, 1.9, 0.03);
+    const d = p.d || 0.45;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box('metalGrey', sx * (w / 2 - 0.02), 0, sz * (d / 2 - 0.02), 0.03, 2.0, 0.03);
     for (let k = 0; k < 5; k++) {
-      const y = 0.08 + k * 0.44;
-      b.box('metalGrey', 0, y, 0, w, 0.02, 0.4);
+      const y = 0.08 + k * 0.46;
+      b.box('metalGrey', 0, y, 0, w, 0.02, d);
       if (k < 4 && rng) {
         let x = -w / 2 + 0.05;
         while (x < w / 2 - 0.2) {
-          const bw = rng.float(0.18, 0.36);
-          if (rng.chance(0.75)) b.box(rng.pick(['cardboard', 'cardboard', 'paper', 'linen']), x + bw / 2, y + 0.02, rng.float(-0.04, 0.04), bw - 0.02, rng.float(0.12, 0.34), 0.32);
+          const bw = rng.float(0.22, 0.4);
+          if (rng.chance(p.full ?? 0.75)) carton(b, rng, x + bw / 2, y + 0.02, rng.float(-0.03, 0.03), bw - 0.03, rng.float(0.18, 0.36), d - 0.08);
           x += bw;
         }
       }
     }
-    b.collideBox(0, 0, w, 0.42, 1.9);
+    b.collideBox(0, 0, w, d, 2.0);
   },
 
-  obsWindow(b, p) {
-    // one-way observation glass, origin on the wall
-    const w = p.w || 2.2;
-    b.box('doorFrame', 0, 0.95, 0.03, w + 0.14, 0.07, 0.08);
-    b.box('doorFrame', 0, 2.05, 0.02, w + 0.14, 0.07, 0.05);
-    b.face('mirror', [-w / 2, 1.02, 0.012], [w, 0, 0], [0, 1.03, 0], [0, 0], { seg: 0.6 });
-    b.box('doorFrame', -w / 2 - 0.035, 1.0, 0.02, 0.07, 1.06, 0.05);
-    b.box('doorFrame', w / 2 + 0.035, 1.0, 0.02, 0.07, 1.06, 0.05);
+  vending(b, p) {
+    b.box('oxblood', 0, 0, 0, 0.95, 1.85, 0.8, { seg: 0.4 });
+    b.face('vendingGlow', [-0.38, 0.55, 0.402], [0.6, 0, 0], [0, 1.15, 0], [0, 0], { glow: [1.1, 1.2, 1.3], seg: 0.4, uvRect: [0, 0, 1, 1], flicker: !!p.flicker });
+    b.box('blackPlastic', 0.33, 0.9, 0.4, 0.18, 0.5, 0.02);
+    b.box('blackPlastic', 0, 0.15, 0.4, 0.6, 0.22, 0.02);
+    b.light({ x: 0, y: 1.1, z: 0.8, color: [0.8, 0.92, 1.0], power: 0.4, range: 4, flicker: !!p.flicker });
+    b.collideBox(0, 0, 0.97, 0.82, 1.9);
   },
 
-  fireExt(b) {
-    b.box('chrome', 0, 1.0, 0.02, 0.12, 0.08, 0.04);
-    b.cyl('redPaint', 0, 0.55, 0.11, 0.075, 0.5, { segs: 10 });
-    b.cyl('blackPlastic', 0, 1.05, 0.11, 0.03, 0.08, { segs: 6 });
+  carton(b, p, rng) {
+    const s = p.s || 0.5;
+    carton(b, rng, 0, 0, 0, s, s * 0.75, s * 1.1);
+    if (p.stack) carton(b, rng, rng ? rng.float(-0.05, 0.05) : 0, s * 0.75, 0, s * 0.9, s * 0.6, s);
+    b.collideBox(0, 0, s, s * 1.1, s * (p.stack ? 1.35 : 0.75));
   },
 
-  payphone(b) {
-    b.box('chrome', 0, 1.05, 0.11, 0.32, 0.6, 0.22, { seg: 0.3 });
-    b.box('blackPlastic', -0.1, 1.2, 0.225, 0.07, 0.24, 0.05);
-    b.box('chrome', 0.06, 1.35, 0.222, 0.14, 0.18, 0.006);
-  },
-
-  paperStack(b, p) {
-    const y = p.y || 0;
-    b.box('paper', 0, y, 0, 0.24, 0.015, 0.31, { rot: p.r || 0 });
-  },
-
-  loreDoc(b, p) {
-    // the found document for this place: a folder on a small table just inside the first door
-    if (!p.onSurface) {
-      b.box('walnut', 0, 0.7, 0, 0.55, 0.035, 0.45);
-      b.cyl('chrome', 0, 0, 0, 0.02, 0.7, { segs: 6, noCap: true });
-      b.cyl('chrome', 0, 0, 0, 0.18, 0.015, { segs: 10 });
-      b.collideBox(0, 0, 0.5, 0.45, 0.75);
-    }
-    const y = p.onSurface ? p.y : 0.735;
-    b.box('manila', 0.02, y, 0, 0.24, 0.012, 0.31, { rot: 0.12 });
-    b.box('paper', -0.01, y + 0.012, 0.01, 0.21, 0.004, 0.28, { rot: 0.05 });
-  },
-
-  // ---- ballroom ----
-
-  roundTable(b, p, rng) {
-    // a banquet round with a floor-length cloth, a brass centrepiece and chairs pulled up (or not)
-    const r = p.r || 0.75;
-    b.cyl('tablecloth', 0, 0.02, 0, r + 0.04, 0.74, { r1: r + 0.1, segs: 18, noCap: true });
-    b.cyl('tablecloth', 0, 0.74, 0, r + 0.04, 0.02, { segs: 18 });
-    b.cyl('brass', 0, 0.76, 0, 0.07, 0.02, { segs: 10 });
-    b.cyl('brass', 0, 0.78, 0, 0.012, 0.22, { segs: 6, noCap: true });
-    b.cyl('shade', 0, 0.98, 0, 0.035, 0.07, { r1: 0.045, segs: 8, glow: [1.0, 0.62, 0.3] });
-    b.light({ x: 0, y: 1.05, z: 0, color: [1.0, 0.7, 0.4], power: 0.28, range: 2.5 });
-    // place settings
-    const n = p.seats || 6;
-    for (let k = 0; k < n; k++) {
-      const a = (k / n) * Math.PI * 2;
-      const sx = Math.sin(a);
-      const sz = Math.cos(a);
-      b.cyl('ceramic', sx * (r - 0.2), 0.755, sz * (r - 0.2), 0.11, 0.012, { segs: 12 });
-      if (rng && rng.chance(0.4)) b.box('paperTag', sx * (r - 0.38), 0.765, sz * (r - 0.38), 0.07, 0.03, 0.02, { rot: a });
-      // gilt banquet chair, some pushed back, one or two knocked askew
-      const out = r + 0.28 + (rng ? rng.float(0, 0.25) : 0);
-      const skew = rng ? rng.float(-0.3, 0.3) : 0;
-      b.push(sx * out, sz * out, a + Math.PI + skew);
-      legs(b, 'brass', 0.42, 0.42, 0.45, 0.03, 0.012);
-      b.box('velvet', 0, 0.45, 0, 0.44, 0.06, 0.42);
-      // gilt frame back: two posts and a top rail around a velvet pad
-      for (const s of [-1, 1]) b.box('brass', s * 0.2, 0.5, -0.2, 0.025, 0.5, 0.025);
-      b.box('brass', 0, 0.96, -0.2, 0.42, 0.04, 0.03);
-      b.box('velvet', 0, 0.6, -0.2, 0.36, 0.32, 0.03);
-      b.pop();
-    }
-    b.collideBox(0, 0, (r + 0.5) * 2, (r + 0.5) * 2, 0.8);
-  },
-
-  chandelier(b, p) {
-    // a brass hoop of candle bulbs with hanging drops, warm and a little too bright
-    const ceil = p.ceil || 4;
-    const y = ceil - (p.drop || 1.1);
-    const R = p.R || 0.55;
-    const fl = !!p.flicker;
-    // chain and ceiling rose
-    b.cyl('brass', 0, ceil - 0.04, 0, 0.12, 0.04, { r1: 0.08, segs: 12 });
-    b.cyl('brass', 0, y + 0.3, 0, 0.012, ceil - y - 0.3, { segs: 5, noCap: true });
-    // central column: a turned brass stem with a bowl underneath
-    b.cyl('brass', 0, y - 0.05, 0, 0.05, 0.4, { r1: 0.03, segs: 10 });
-    b.cyl('brass', 0, y - 0.22, 0, 0.11, 0.17, { r1: 0.02, segs: 12 });
-    const tiers = p.tiers || 1;
-    for (let t = 0; t < tiers; t++) {
-      const r = t ? R * 0.55 : R;
-      const ty = y + t * 0.32;
-      const n = t ? 6 : 10;
-      // the hoop itself: short tangent bars around the ring
-      for (let k = 0; k < n * 2; k++) {
-        const a = ((k + 0.5) / (n * 2)) * Math.PI * 2;
-        b.box('brass', Math.sin(a) * r, ty, Math.cos(a) * r, (2 * Math.PI * r) / (n * 2) + 0.02, 0.025, 0.025, { rot: a });
-      }
-      for (let k = 0; k < n; k++) {
-        const a = (k / n) * Math.PI * 2;
-        const x = Math.sin(a) * r;
-        const z = Math.cos(a) * r;
-        b.box('brass', x / 2, ty - 0.02, z / 2, 0.015, 0.015, r, { rot: a });
-        b.cyl('brass', x, ty + 0.02, z, 0.045, 0.02, { segs: 8 });
-        b.cyl('enamel', x, ty + 0.04, z, 0.016, 0.11, { segs: 6 });
-        b.cyl('lamp', x, ty + 0.15, z, 0.03, 0.07, { r1: 0.008, segs: 6, glow: [2.4, 1.6, 0.85], flicker: fl });
-        // strings of glass drops hanging off the hoop
-        for (let d = 0; d < 3; d++) b.box('chrome', Math.sin(a + 0.3) * r, ty - 0.07 - d * 0.07, Math.cos(a + 0.3) * r, 0.025, 0.05, 0.025, { rot: a });
+  pallet(b, p, rng) {
+    // a 1.2 x 1.0 m pallet, optionally loaded with wrapped cartons
+    const w = 1.2;
+    const d = 1.0;
+    for (const sz of [-0.42, 0, 0.42]) b.box('palletWood', 0, 0, sz, w, 0.1, 0.12);
+    for (let k = 0; k < 7; k++) b.box('palletWood', -w / 2 + 0.07 + k * ((w - 0.14) / 6), 0.1, 0, 0.12, 0.03, d);
+    let top = 0.13;
+    if (p.load && rng) {
+      const layers = rng.int(1, p.tall ? 4 : 3);
+      for (let l = 0; l < layers; l++) {
+        const h = rng.float(0.28, 0.4);
+        for (const sx of [-0.3, 0.3])
+          for (const sz of [-0.25, 0.25]) if (rng.chance(l === layers - 1 ? 0.8 : 1)) carton(b, rng, sx, top, sz, 0.56, h, 0.46);
+        top += h;
       }
     }
-    // the bulbs shade the ceiling a little: light sits under the hoop
-    b.light({ x: 0, y: y - 0.25, z: 0, color: [1.0, 0.76, 0.48], power: p.power ?? 2.2, range: 9, flicker: fl });
+    b.collideBox(0, 0, w, d, Math.max(0.15, top));
   },
 
-  stage(b, p) {
-    // a low bandstand with a velvet backdrop, an empty music stand and a microphone
-    const w = p.w || 4;
-    const d = p.d || 2.2;
-    b.box('walnut', 0, 0, 0, w, 0.45, d, { seg: 0.5 });
-    b.box('parquet', 0, 0.45, 0, w, 0.005, d, { seg: 0.5 });
-    b.box('velvet', 0, 0.45, -d / 2 + 0.05, w, 2.6, 0.08, { seg: 0.6 });
-    b.cyl('chrome', 0.3, 0.45, 0.4, 0.012, 1.45, { segs: 6, noCap: true });
-    b.cyl('blackPlastic', 0.3, 1.9, 0.4, 0.025, 0.08, { segs: 8 });
-    b.cyl('chrome', 0.3, 0.45, 0.4, 0.13, 0.015, { segs: 10 });
-    for (const sx of [-1.2, -0.6, 0.9]) {
-      b.cyl('chrome', sx, 0.45, -0.2, 0.01, 0.95, { segs: 5, noCap: true });
-      b.box('blackPlastic', sx, 1.35, -0.18, 0.4, 0.28, 0.02, { rot: 0 });
-    }
-    b.box('walnut', 0, 0, d / 2 + 0.2, 1.0, 0.22, 0.4);
-    // footlights along the lip and a warm wash on the curtain
-    b.box('brass', 0, 0.44, d / 2 - 0.06, w - 0.2, 0.04, 0.08);
-    for (let x = -w / 2 + 0.35; x < w / 2 - 0.2; x += 0.5) b.box('lamp', x, 0.48, d / 2 - 0.06, 0.1, 0.025, 0.04, { glow: [2.0, 1.3, 0.7] });
-    b.light({ x: 0, y: 0.7, z: d / 2 - 0.3, color: [1.0, 0.72, 0.45], power: 0.9, range: 4.5 });
-    b.light({ x: 0, y: 2.6, z: 0.2, color: [1.0, 0.78, 0.55], power: 1.1, range: 5 });
-    b.collideBox(0, 0, w, d + 0.4, 0.45);
-  },
-
-  // ---- laundry ----
-
-  washer(b, p) {
-    // a coin-op front loader (or a dryer: p.dryer), enamel, chrome porthole
-    b.box('blackPlastic', 0, 0, 0.02, 0.62, 0.07, 0.6);
-    b.box('enamel', 0, 0.07, 0, 0.68, 0.85, 0.66, { seg: 0.35 });
-    b.box('metalGrey', 0, 0.918, 0, 0.69, 0.008, 0.67);
-    // console: coin slide, a dial, a slot of a display
-    b.box('enamel', 0, 0.92, -0.25, 0.68, 0.16, 0.16);
-    b.box('steelDark', -0.13, 0.98, -0.168, 0.28, 0.07, 0.006);
-    b.box('chrome', 0.18, 0.96, -0.172, 0.14, 0.09, 0.016);
-    b.cyl('blackPlastic', 0.04, 1.01, -0.17, 0.025, 0.02, { segs: 8, rx: true });
-    // porthole: chrome bezel, smoked glass, a hinge and a handle
-    b.cyl('chrome', 0, 0.5, 0.33, 0.215, 0.03, { segs: 18, rx: true });
-    const lit = p.dryer && p.on;
-    b.cyl(lit ? 'lamp' : 'glass', 0, 0.5, 0.36, 0.165, 0.008, lit ? { segs: 16, rx: true, glow: [0.85, 0.58, 0.3] } : { segs: 16, rx: true });
-    b.box('chrome', -0.215, 0.42, 0.33, 0.03, 0.16, 0.025);
-    b.box('chrome', 0.215, 0.47, 0.33, 0.03, 0.06, 0.035);
-    if (lit) b.light({ x: 0, y: 0.5, z: 0.6, color: [1.0, 0.7, 0.4], power: 0.18, range: 2 });
-    b.collideBox(0, 0, 0.7, 0.68, 1.06);
-  },
-
-  foldingTable(b, p, rng) {
-    const w = p.w || 1.8;
-    legs(b, 'chrome', w, 0.75, 0.86, 0.06, 0.016);
-    b.box('laminate', 0, 0.86, 0, w, 0.03, 0.75);
-    // folded linen in stacks
-    let x = -w / 2 + 0.2;
-    while (x < w / 2 - 0.25) {
-      const n = rng ? rng.int(2, 7) : 4;
-      for (let k = 0; k < n; k++) b.box('linen', x + (rng ? rng.float(-0.01, 0.01) : 0), 0.89 + k * 0.05, rng ? rng.float(-0.1, 0.1) : 0, 0.34, 0.045, 0.3, { rot: rng ? rng.float(-0.05, 0.05) : 0 });
-      x += 0.42;
-    }
-    b.collideBox(0, 0, w, 0.75, 0.9);
-  },
-
-  breakerPanel(b, p) {
-    // wall-mounted main panel, every breaker thrown; and beside it the meter. Origin on the wall.
-    const y = 1.0;
-    b.box('metalGrey', 0, y, 0.06, 0.62, 1.0, 0.12, { seg: 0.35 });
-    b.box('metalGrey', 0, y + 0.02, 0.122, 0.56, 0.94, 0.006);
-    for (let k = 0; k < 20; k++)
-      for (const sx of [-0.12, 0.12]) {
-        b.box('blackPlastic', sx, y + 0.1 + k * 0.042, 0.13, 0.11, 0.028, 0.014);
-        b.box('blackPlastic', sx + 0.04, y + 0.1 + k * 0.042, 0.142, 0.022, 0.016, 0.022, { rot: 0 });
-      }
-    b.box('paperTag', 0, y + 0.93, 0.13, 0.4, 0.05, 0.004);
-    // the meter: a glass dome over a disc, and a red tag hung on it
-    b.box('metalGrey', 0.62, y + 0.55, 0.05, 0.3, 0.42, 0.1);
-    b.cyl('glass', 0.62, y + 0.76, 0.1, 0.12, 0.1, { segs: 14, rx: true });
-    b.box('chrome', 0.62, y + 0.73, 0.16, 0.16, 0.008, 0.004);
-    b.box('redPaint', 0.62, y + 0.42, 0.11, 0.08, 0.12, 0.004);
-    // conduit up to the ceiling
-    b.cyl('metalGrey', -0.2, y + 1.0, 0.05, 0.03, 2, { segs: 6, noCap: true });
-    b.cyl('metalGrey', 0.2, y + 1.0, 0.05, 0.03, 2, { segs: 6, noCap: true });
-  },
-
-  // ---- drafting room ----
-
-  draftingTable(b, p, rng) {
-    // a tilted drawing board on a steel stand with a plan taped to it and a clamp-arm lamp
-    // steel trestle: a post and a foot each side, a stretcher between
-    for (const sx of [-0.55, 0.55]) {
-      b.box('steelDark', sx, 0, 0, 0.05, 0.02, 0.66);
-      b.box('steelDark', sx, 0.02, -0.05, 0.045, 0.9, 0.045);
-      b.box('steelDark', sx, 0.86, -0.05, 0.05, 0.05, 0.5);
-    }
-    b.box('steelDark', 0, 0.22, -0.05, 1.1, 0.04, 0.035);
-    // the board, tilted toward the draftsman (front edge low, at +z)
-    const t = 0.28;
-    const D = 0.9;
-    const W = 1.3;
-    const yF = 0.86;
-    const ct = Math.cos(t);
-    const st = Math.sin(t);
-    const o = [-W / 2, yF, D / 2];
-    const v = [0, D * st, -D * ct];
-    b.face('draftBoard', o, [W, 0, 0], v, [0, 0], { seg: 0.7 });
-    b.face('steelDark', [o[0], o[1] - 0.025, o[2]], v, [W, 0, 0], [0, 0], { seg: 0.7 });
-    b.box('draftBoard', 0, yF - 0.025, D / 2 - 0.01, W, 0.028, 0.02);
-    const n = [0, ct, st];
-    const sheet = rng && rng.chance(0.5) ? 'planSheet' : 'blueprint';
-    const sv0 = 0.14; // sheet starts this far up the board
-    const so = [-0.42, yF + st * sv0 + n[1] * 0.004, D / 2 - ct * sv0 + n[2] * 0.004];
-    b.face(sheet, so, [0.84, 0, 0], [0, st * 0.6, -ct * 0.6], [0, 0], { seg: 1, uvRect: rng ? [rng.float(0, 0.3), rng.float(0, 0.3), 0.7, 0.7] : [0, 0, 1, 1] });
-    // parallel rule across the board, and a pencil
-    const ry = yF + st * 0.5 + 0.012;
-    b.box('chrome', 0, ry, D / 2 - ct * 0.5, 1.22, 0.012, 0.035);
-    b.box('shade', 0.2, yF + st * 0.2 + 0.01, D / 2 - ct * 0.2, 0.16, 0.008, 0.008, { rot: 0.5 });
-    // lamp on a clamp arm from the back corner
-    b.cyl('chrome', 0.6, yF + D * st, -D / 2 * ct, 0.012, 0.45, { segs: 5, noCap: true });
-    b.box('chrome', 0.52, yF + D * st + 0.43, -0.2, 0.015, 0.015, 0.5);
-    b.cyl('shade', 0.45, 1.5, 0.02, 0.09, 0.13, { r1: 0.04, segs: 10, glow: [0.95, 0.85, 0.6], noCap: true });
-    b.light({ x: 0.35, y: 1.42, z: 0.1, type: 'spotDown', color: [1.0, 0.9, 0.7], power: p.power ?? 0.9, range: 3 });
-    b.collideBox(0, 0, 1.35, 0.95, 1.1);
-  },
-
-  flatFile(b, p, rng) {
-    const w = p.w || 1.3;
-    b.box('metalGrey', 0, 0, 0, w, 0.9, 0.9, { seg: 0.4 });
-    for (let k = 0; k < 8; k++) b.box('chrome', 0, 0.12 + k * 0.1, 0.452, 0.22, 0.012, 0.01);
-    // rolled plans on top
-    const n = rng ? rng.int(2, 6) : 3;
-    for (let k = 0; k < n; k++) {
-      b.push(rng ? rng.float(-w / 2 + 0.2, w / 2 - 0.2) : 0, rng ? rng.float(-0.25, 0.25) : 0, Math.PI / 2 + (rng ? rng.float(-0.3, 0.3) : 0), 0.95);
-      b.cyl(rng && rng.chance(0.4) ? 'blueprint' : 'paper', 0, 0.04, -0.4, 0.04, 0.8, { segs: 8, rx: true });
-      b.pop();
-    }
-    b.collideBox(0, 0, w, 0.9, 0.95);
-  },
-
-  pinnedPlan(b, p, rng) {
-    // a floor plan pinned to the wall, origin on the wall
+  crate(b, p, rng) {
     const w = p.w || 0.9;
-    const h = p.h || 0.65;
-    const y = p.y || 1.2;
-    const sheet = p.sheet || (rng && rng.chance(0.45) ? 'planSheet' : 'blueprint');
-    const dz = 0.006 + (p.layer || 0) * 0.005;
-    b.face(sheet, [-w / 2, y, dz], [w, 0, 0], [0, h, 0], [0, 0], { seg: 1, uvRect: rng ? [rng.float(0, 0.2), rng.float(0, 0.2), 0.8, 0.8] : [0, 0, 1, 1] });
-    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.box('redPaint', (sx * w) / 2.15, y + h / 2 + (sy * h) / 2.15, dz + 0.004, 0.012, 0.012, 0.01);
+    const h = p.h || 0.7;
+    const d = p.d || 0.7;
+    b.box('palletWood', 0, 0, 0, w, h, d, { seg: 0.4 });
+    for (const y of [0.04, h - 0.1]) b.box('palletWood', 0, y, d / 2 + 0.01, w + 0.02, 0.07, 0.02);
+    b.box('safetyYellow', -w / 4, h * 0.45, d / 2 + 0.012, 0.22, 0.12, 0.004);
+    b.collideBox(0, 0, w, d, h);
+    if (p.stack && rng && rng.chance(0.7)) {
+      b.push(rng.float(-0.05, 0.05), rng.float(-0.05, 0.05), rng.float(-0.1, 0.1), h);
+      b.box('palletWood', 0, 0, 0, w * 0.86, h * 0.8, d * 0.9, { seg: 0.4 });
+      b.pop();
+    }
   },
 
-  cardboardBox(b, p, rng) {
-    const s = p.s || 0.45;
-    b.box('cardboard', 0, 0, 0, s, s * 0.8, s * 1.1);
-    b.collideBox(0, 0, s, s * 1.1, s * 0.8);
+  palletRack(b, p, rng) {
+    // one bay of adjustable pallet racking: teal uprights, oxblood beams, 3 levels.
+    // Front faces +z. Width w along x, depth 1.1 m.
+    const w = p.w || 2.7;
+    const d = 1.1;
+    const levels = p.levels || [0, 1.6, 3.2];
+    const H = p.h || 4.6;
+    for (const sx of [-w / 2, w / 2]) {
+      for (const sz of [-d / 2 + 0.05, d / 2 - 0.05]) b.box('steelPaint', sx, 0, sz, 0.08, H, 0.06);
+      // diagonal bracing between the frame's front and back post
+      for (let y = 0.4; y < H - 0.6; y += 1.0) b.box('steelPaint', sx, y, 0, 0.03, 0.5, d - 0.1, { rot: 0 });
+      b.box('steelDark', sx, 0, 0, 0.14, 0.02, d + 0.05);
+    }
+    for (const y of levels) {
+      if (y > 0) for (const sz of [-d / 2 + 0.05, d / 2 - 0.05]) b.box('oxblood', 0, y - 0.1, sz, w, 0.1, 0.05);
+      // what sits on this level: a pallet of stock, a crate, or nothing
+      if (!rng) continue;
+      const base = y > 0 ? y : 0;
+      for (const sx of [-w / 4, w / 4]) {
+        const r = rng.next();
+        if (r < (p.empty ?? 0.25)) continue;
+        b.push(sx, 0, PI / 2, base);
+        if (r < 0.8) PROPS.pallet(b, { load: true }, rng);
+        else PROPS.crate(b, { w: 0.9, h: 0.75, d: 0.8 }, rng);
+        b.pop();
+      }
+    }
+    // a load notice on the upright
+    b.box('safetyYellow', -w / 2 + 0.12, 1.2, d / 2 - 0.02, 0.16, 0.22, 0.004);
+    b.collideBox(0, 0, w + 0.1, d, H);
+  },
+
+  rollerShutter(b, p) {
+    // a closed roller shutter door, origin on the wall: slatted steel, box at the top, guides
+    const w = p.w || 3.0;
+    const h = p.h || 3.2;
+    for (let y = 0.0; y < h; y += 0.1) b.box('oxblood', 0, y, 0.03, w, 0.085, 0.02, { seg: 1 });
+    b.box('steelDark', 0, 0, 0.04, w, 0.06, 0.04);
+    b.box('metalGrey', 0, h, 0.12, w + 0.3, 0.45, 0.24, { seg: 0.6 });
+    for (const sx of [-1, 1]) b.box('metalGrey', sx * (w / 2 + 0.06), 0, 0.05, 0.1, h, 0.1);
+    b.box('hazard', 0, 0, 0.065, w, 0.12, 0.005);
+    b.box('safetyYellow', w / 2 + 0.3, 1.1, 0.03, 0.14, 0.24, 0.06);
+  },
+
+  noticeboard(b, p) {
+    const y = p.y || 1.2;
+    const w = p.w || 1.2;
+    b.box('doorFrame', 0, y - 0.03, 0.015, w + 0.06, 0.86, 0.03);
+    b.face('noticeboard', [-w / 2, y, 0.032], [w, 0, 0], [0, 0.8, 0], [0, 0], { seg: 1, uvRect: [0, 0, 1, 1] });
+  },
+
+  clockStation(b) {
+    // a wall time recorder between two card racks; every card is in the IN column
+    b.box('steelDark', 0, 1.15, 0.09, 0.36, 0.48, 0.18);
+    b.box('beigePlastic', 0, 1.42, 0.181, 0.22, 0.14, 0.004);
+    b.box('chrome', 0, 1.18, 0.181, 0.06, 0.06, 0.02);
+    for (const sx of [-0.62, 0.62]) {
+      b.box('metalGrey', sx, 0.9, 0.025, 0.5, 0.9, 0.05);
+      b.face('timecards', [sx - 0.24, 0.92, 0.051], [0.48, 0, 0], [0, 0.86, 0], [0, 0], { seg: 1, uvRect: [0, 0, 1, 1] });
+    }
+  },
+
+  locker(b, p, rng) {
+    // a bank of grey lockers, one or two doors ajar
+    const n = p.n || 4;
+    const w = 0.38;
+    for (let k = 0; k < n; k++) {
+      const x = (k - (n - 1) / 2) * w;
+      b.box('metalGrey', x, 0.1, 0, w - 0.01, 1.8, 0.48, { seg: 0.4 });
+      const open = rng && rng.chance(0.18);
+      if (open) {
+        b.box('steelDark', x, 0.12, 0.2, w - 0.04, 1.76, 0.04);
+        b.push(x - w / 2 + 0.02, 0.24, -1.1);
+        b.box('metalGrey', w / 2 - 0.02, 0.12, 0, w - 0.03, 1.76, 0.02);
+        b.pop();
+      } else {
+        for (let s = 0; s < 3; s++) b.box('steelDark', x, 1.55 + s * 0.04, 0.242, w * 0.5, 0.012, 0.004);
+        b.box('chrome', x + w / 2 - 0.07, 1.0, 0.245, 0.02, 0.08, 0.01);
+      }
+    }
+    b.box('steelDark', 0, 0, 0, n * w, 0.1, 0.46);
+    b.collideBox(0, 0, n * w, 0.5, 1.9);
+  },
+
+  workbench(b, p, rng) {
+    const w = p.w || 2.0;
+    legs(b, 'steelDark', w, 0.75, 0.88, 0.04, 0.025);
+    b.box('palletWood', 0, 0.88, 0, w, 0.06, 0.75);
+    b.box('steelDark', 0, 0.2, 0, w - 0.1, 0.03, 0.7);
+    // pegboard and a vice
+    b.box('cardboard', 0, 0.94, -0.36, w, 0.8, 0.02);
+    b.box('steelPaint', w / 2 - 0.25, 0.94, 0.2, 0.18, 0.14, 0.2);
+    if (rng) for (let k = 0; k < 6; k++) b.box('steelDark', rng.float(-w / 2 + 0.2, w / 2 - 0.2), rng.float(1.1, 1.6), -0.33, rng.float(0.04, 0.2), rng.float(0.04, 0.3), 0.02);
+    b.collideBox(0, 0, w, 0.78, 0.95);
+  },
+
+  // ---- cold storage ----
+  evaporator(b, p) {
+    // a ceiling-hung evaporator unit: a white casing with fan grilles, frosted fins
+    const y = p.y || 2.6;
+    b.box('panelWhite', 0, y, 0, 2.0, 0.55, 0.7, { seg: 0.5 });
+    for (const sx of [-0.55, 0, 0.55]) {
+      b.cyl('steelDark', sx, y + 0.1, 0.36, 0.2, 0.02, { segs: 14, rx: true });
+      b.cyl('ice', sx, y + 0.1, 0.375, 0.05, 0.01, { segs: 8, rx: true });
+    }
+    b.box('ice', 0, y - 0.02, -0.05, 1.9, 0.04, 0.6);
+    for (const sx of [-0.9, 0.9]) b.box('steelDark', sx, y + 0.55, 0, 0.02, 0.6, 0.02);
+  },
+
+  frostStack(b, p, rng) {
+    // cartons of frozen stock on a pallet, rimed white along the tops
+    PROPS.pallet(b, { load: true, tall: true }, rng);
+    b.box('ice', 0, 0.13, 0, 1.18, 0.012, 0.98);
+  },
+
+  // ---- records / offices ----
+  compactor(b, p, rng) {
+    // a run of mobile shelving on floor rails, each unit with a crank wheel on its end
+    const len = p.len || 4;
+    const n = p.n || 4;
+    for (const sx of [-len / 2 + 0.3, len / 2 - 0.3]) b.box('steelDark', sx, 0, 0, 0.06, 0.02, n * 1.05 + 0.4);
+    for (let k = 0; k < n; k++) {
+      const z = (k - (n - 1) / 2) * 1.05;
+      b.push(0, z, 0);
+      b.box('beigePlastic', 0, 0.02, 0, len, 2.1, 0.08, { seg: 0.5 });
+      for (let s = 0; s < 6; s++) {
+        const y = 0.12 + s * 0.34;
+        b.box('beigePlastic', 0, y, 0.24, len - 0.1, 0.02, 0.42);
+        b.box('beigePlastic', 0, y, -0.24, len - 0.1, 0.02, 0.42);
+        if (rng)
+          for (const side of [0.24, -0.24]) {
+            let x = -len / 2 + 0.1;
+            while (x < len / 2 - 0.3) {
+              const bw = rng.float(0.28, 0.36);
+              if (rng.chance(p.full ?? 0.8)) b.box(rng.chance(0.85) ? 'cardboard' : 'paper', x + bw / 2, y + 0.02, side, bw - 0.02, rng.float(0.24, 0.28), 0.36);
+              x += bw;
+            }
+          }
+      }
+      // the end panel faces the aisle (+x) with its crank wheel
+      b.box('steelPaint', len / 2, 0, 0, 0.04, 2.15, 0.96);
+      b.push(len / 2 + 0.08, 0, PI / 2, 0);
+      b.cyl('chrome', 0, 1.1, 0, 0.16, 0.025, { segs: 14, rx: true });
+      b.pop();
+      b.pop();
+    }
+    b.collideBox(0, 0, len, n * 1.05, 2.2);
+  },
+
+  cubicle(b, p, rng) {
+    // two desks facing each other across a low fabric screen, chairs pulled out
+    const w = 1.5;
+    b.box('partition', 0, 0, 0, w * 2 + 0.06, 1.45, 0.06, { seg: 0.5 });
+    b.box('steelDark', 0, 1.45, 0, w * 2 + 0.08, 0.03, 0.08);
+    for (const side of [-1, 1]) b.box('partition', side * (w + 0.03), 0, 0, 0.05, 1.3, 1.6, { seg: 0.5 });
+    for (const [sx, sz, r] of [[-w / 2, 0.42, 0], [w / 2, 0.42, 0], [-w / 2, -0.42, PI], [w / 2, -0.42, PI]]) {
+      if (rng && rng.chance(0.12)) continue;
+      b.push(sx, sz, r);
+      PROPS.desk(b, { w: 1.35, typewriter: rng ? rng.chance(0.5) : false, papers: rng ? rng.chance(0.6) : true }, rng);
+      b.push(rng ? rng.float(-0.3, 0.3) : 0, 0.75, rng ? rng.float(-0.6, 0.6) : 0);
+      if (!rng || rng.chance(0.85)) PROPS.officeChair(b);
+      b.pop();
+      b.pop();
+    }
+  },
+
+  // ---- bottling ----
+  tank(b, p) {
+    // a stainless process vessel on legs with a dished top, a ladder and a manway
+    const r = p.r || 1.1;
+    const h = p.h || 3.4;
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * PI * 2 + PI / 4;
+      b.cyl('steelDark', Math.cos(a) * r * 0.8, 0, Math.sin(a) * r * 0.8, 0.05, 0.6, { segs: 6 });
+    }
+    b.cyl('tankSteel', 0, 0.45, 0, r * 0.6, 0.3, { r1: r, segs: 20, noCap: true });
+    b.cyl('tankSteel', 0, 0.75, 0, r, h, { segs: 20, noCap: true });
+    b.cyl('tankSteel', 0, 0.75 + h, 0, r, 0.4, { r1: r * 0.25, segs: 20 });
+    // bands and a gauge
+    for (const y of [1.4, 2.4, 3.4]) if (y < h) b.cyl('steelDark', 0, y, 0, r + 0.015, 0.05, { segs: 20, noCap: true });
+    b.cyl('chrome', 0, 1.4, r + 0.02, 0.1, 0.04, { segs: 12, rx: true });
+    // ladder up the front
+    for (const sx of [-0.2, 0.2]) b.box('steelDark', sx, 0.6, r + 0.12, 0.04, h + 0.4, 0.04);
+    for (let y = 0.8; y < h + 0.9; y += 0.3) b.box('steelDark', 0, y, r + 0.12, 0.4, 0.025, 0.03);
+    b.box('safetyYellow', 0, 1.0, r + 0.02, 0.3, 0.2, 0.004);
+    b.collideBox(0, 0, r * 2 + 0.1, r * 2 + 0.3, h + 1);
+  },
+
+  conveyor(b, p, rng) {
+    // a bottling line: a roller bed on legs with green bottles queued along it, guard rails
+    const len = p.len || 6;
+    for (let x = -len / 2 + 0.3; x <= len / 2 - 0.3 + 1e-6; x += 1.2)
+      for (const sz of [-0.2, 0.2]) b.cyl('steelDark', x, 0, sz, 0.025, 0.82, { segs: 6, noCap: true });
+    b.box('stainless', 0, 0.82, 0, len, 0.08, 0.5);
+    b.box('rubber', 0, 0.9, 0, len, 0.01, 0.4);
+    for (const sz of [-0.24, 0.24]) b.box('chrome', 0, 1.02, sz, len, 0.03, 0.02);
+    if (rng) {
+      let x = -len / 2 + 0.2;
+      while (x < len / 2 - 0.2) {
+        if (rng.chance(0.85)) {
+          b.cyl('glass', x, 0.91, 0, 0.04, 0.2, { segs: 8 });
+          b.cyl('glass', x, 1.11, 0, 0.04, 0.06, { r1: 0.014, segs: 8 });
+        }
+        x += rng.chance(0.2) ? 0.3 : 0.1;
+      }
+    }
+    b.collideBox(0, 0, len, 0.55, 1.05);
+  },
+
+  pipeRun(b, p) {
+    // overhead pipes along x at a height, with hangers up to the ceiling
+    const len = p.len || 8;
+    const y = p.y || 3.6;
+    const ceil = p.ceil || 6;
+    for (const [z, r, mat] of [[0, 0.12, 'steelPaint'], [0.34, 0.08, 'copper'], [-0.3, 0.06, 'metalGrey']]) {
+      b.push(0, z, PI / 2);
+      b.cyl(mat, 0, y, -len / 2, r, len, { segs: 10, rx: true, noCap: true });
+      b.pop();
+    }
+    for (let x = -len / 2 + 0.5; x < len / 2; x += 2.5) b.box('steelDark', x, y + 0.12, 0, 0.03, ceil - y - 0.12, 0.03);
+  },
+
+  controlDesk(b, p, rng) {
+    b.box('steelPaint', 0, 0, 0, 2.0, 0.85, 0.8, { seg: 0.5 });
+    // sloped panel with dials
+    b.push(0, -0.1, 0, 0.85);
+    b.box('steelPaint', 0, 0, -0.1, 2.0, 0.35, 0.5);
+    for (let k = 0; k < 8; k++) {
+      const x = -0.85 + k * 0.24;
+      b.cyl('chrome', x, 0.2, 0.16, 0.05, 0.02, { segs: 10, rx: true });
+      b.box('lamp', x, 0.08, 0.152, 0.03, 0.03, 0.004, { glow: rng && rng.chance(0.4) ? [2.0, 0.4, 0.1] : [0.1, 0.03, 0.02] });
+    }
+    b.pop();
+    b.collideBox(0, 0, 2.0, 0.85, 1.2);
+  },
+
+  // ---- yard ----
+  lampPost(b, p) {
+    // a sodium lamp on a tall pole with an outreach arm; the light pools orange on the asphalt
+    const h = p.h || 6.5;
+    b.cyl('steelDark', 0, 0, 0, 0.09, 0.25, { segs: 8 });
+    b.cyl('metalGrey', 0, 0.25, 0, 0.06, h - 0.25, { r1: 0.045, segs: 8, noCap: true });
+    b.box('metalGrey', 0, h - 0.05, 0.6, 0.05, 0.05, 1.2);
+    b.box('steelDark', 0, h - 0.12, 1.25, 0.24, 0.14, 0.55);
+    b.box('lamp', 0, h - 0.125, 1.25, 0.18, 0.005, 0.46, { glow: p.dead ? [0.05, 0.03, 0.01] : [2.6, 1.2, 0.3] });
+    if (!p.dead) {
+      b.light({ x: 0, y: h - 0.3, z: 1.25, type: 'spotDown', color: [1.0, 0.55, 0.18], power: p.power ?? 9, range: 16 });
+      b.light({ x: 0, y: h - 0.4, z: 1.25, color: [1.0, 0.55, 0.2], power: 1.2, range: 14 });
+    }
+    b.collideBox(0, 0, 0.2, 0.2, h);
+  },
+
+  wallPack(b, p) {
+    // a bulkhead floodlight over a door, origin on the wall
+    const y = p.y || 2.8;
+    b.box('steelDark', 0, y, 0.08, 0.32, 0.22, 0.16);
+    b.box('lamp', 0, y + 0.02, 0.161, 0.26, 0.16, 0.004, { glow: [2.0, 1.6, 1.0], flicker: !!p.flicker });
+    b.light({ x: 0, y: y - 0.1, z: 0.6, type: 'spotDown', color: [1.0, 0.82, 0.6], power: p.power ?? 3.2, range: 9, flicker: !!p.flicker });
+  },
+
+  dumpster(b) {
+    b.box('steelPaint', 0, 0.15, 0, 1.9, 1.15, 1.1, { seg: 0.5 });
+    b.box('steelDark', 0, 1.3, -0.02, 1.95, 0.06, 1.16, { rot: 0.04 });
+    for (const sx of [-0.8, 0.8]) for (const sz of [-0.45, 0.45]) b.cyl('rubber', sx, 0, sz, 0.07, 0.15, { segs: 8 });
+    b.box('hazard', 0, 0.3, 0.552, 1.6, 0.08, 0.004);
+    b.collideBox(0, 0, 2.0, 1.2, 1.35);
+  },
+
+  oilDrum(b, p) {
+    const mat = p.mat || 'oxblood';
+    b.cyl(mat, 0, 0, 0, 0.29, 0.88, { segs: 14 });
+    for (const y of [0.29, 0.58]) b.cyl('steelDark', 0, y, 0, 0.3, 0.025, { segs: 14, noCap: true });
+    b.collideBox(0, 0, 0.6, 0.6, 0.9);
+  },
+
+  bollard(b) {
+    b.cyl('safetyYellow', 0, 0, 0, 0.1, 1.0, { segs: 10 });
+    b.cyl('rubber', 0, 0.75, 0, 0.102, 0.08, { segs: 10, noCap: true });
+    b.collideBox(0, 0, 0.22, 0.22, 1.0);
+  },
+
+  bayLines(b, p) {
+    // painted parking lines on the asphalt (flat, no collision)
+    const len = p.len || 5;
+    b.box('safetyYellow', 0, 0.002, 0, 0.1, 0.003, len, { seg: 2 });
+  },
+
+  // ---- the Strongbox (inside the van) ----
+  terminal(b) {
+    // a dot-matrix-era terminal on a shelf bolted to the van wall, origin on the wall
+    b.box('steelDark', 0, 0.9, 0.22, 0.7, 0.04, 0.42);
+    b.box('steelDark', 0, 0.6, 0.06, 0.04, 0.3, 0.1);
+    b.box('beigePlastic', 0, 0.94, 0.2, 0.42, 0.36, 0.34);
+    b.face('screen', [-0.15, 1.0, 0.371], [0.3, 0, 0], [0, 0.22, 0], [0, 0], { glow: [1.4, 1.2, 1.0], seg: 1, uvRect: [0, 0, 1, 1] });
+    b.box('beigePlastic', 0, 0.94, 0.48, 0.44, 0.03, 0.16, { rot: 0 });
+    b.light({ x: 0, y: 1.1, z: 0.6, color: [1.0, 0.62, 0.22], power: 0.25, range: 2.2 });
+  },
+
+  chute(b) {
+    // the night-safe chute in the bulkhead: a steel hopper with a hinged flap, origin on the wall
+    b.box('steelDark', 0, 0.75, 0.15, 0.7, 0.55, 0.3, { seg: 0.4 });
+    b.box('chrome', 0, 1.0, 0.31, 0.56, 0.22, 0.02);
+    b.box('rubber', 0, 1.02, 0.322, 0.46, 0.14, 0.004);
+    b.box('safetyYellow', 0, 0.82, 0.302, 0.6, 0.1, 0.004);
+    b.sign('NIGHT SAFE', 0, 1.3, 0.02, 0.6, 0.06, {});
+    b.box('lamp', 0.3, 1.18, 0.31, 0.03, 0.03, 0.006, { glow: [0.2, 2.2, 0.4] });
+    b.collideBox(0, 0.15, 0.7, 0.3, 1.3);
+  },
+
+  toolRack(b) {
+    // a mesh rack on the van wall where requisitioned tools are clipped, origin on the wall
+    b.box('steelDark', 0, 0.55, 0.2, 1.2, 0.04, 0.38);
+    b.box('steelDark', 0, 1.25, 0.12, 1.2, 0.03, 0.22);
+    for (let x = -0.55; x <= 0.56; x += 0.1) b.box('metalGrey', x, 0.58, 0.02, 0.008, 1.0, 0.008);
+    b.collideBox(0, 0.2, 1.2, 0.4, 0.6);
+  },
+
+  governor(b) {
+    // the governor: a sealed box with a red pull-handle, origin on the wall
+    b.box('oxblood', 0, 1.15, 0.07, 0.3, 0.4, 0.14);
+    b.box('chrome', 0, 1.22, 0.15, 0.2, 0.05, 0.05);
+    b.box('safetyYellow', 0, 1.42, 0.141, 0.26, 0.06, 0.004);
+    b.box('lamp', 0.1, 1.48, 0.141, 0.025, 0.025, 0.004, { glow: [2.2, 0.3, 0.1] });
+  },
+
+  cageLamp(b, p) {
+    // a caged bulkhead bulb on the van ceiling
+    const y = p.y || 2.1;
+    b.cyl('steelDark', 0, y - 0.06, 0, 0.1, 0.06, { segs: 10 });
+    b.cyl('shade', 0, y - 0.16, 0, 0.07, 0.1, { segs: 10, glow: [2.2, 1.7, 1.0] });
+    for (let k = 0; k < 4; k++) b.box('steelDark', Math.cos((k * PI) / 2) * 0.08, y - 0.18, Math.sin((k * PI) / 2) * 0.08, 0.01, 0.13, 0.01);
+    b.light({ x: 0, y: y - 0.2, z: 0, color: [1.0, 0.8, 0.55], power: p.power ?? 1.6, range: 5 });
+  },
+
+  bench(b, p) {
+    const len = p.len || 2;
+    b.box('steelDark', 0, 0.42, 0, len, 0.04, 0.4);
+    b.box('vanInterior', 0, 0, -0.15, len, 0.42, 0.08);
+    b.collideBox(0, 0, len, 0.42, 0.46);
   },
 };
 

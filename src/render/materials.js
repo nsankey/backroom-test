@@ -5,79 +5,71 @@ import * as THREE from 'three';
 
 // name -> { tex, scale: metres per texture repeat [u, v], color }
 const DEFS = {
-  carpetGold: { tex: 'carpetGold', scale: [1, 1] },
-  carpetRust: { tex: 'carpetRust', scale: [1, 1] },
-  carpetAvocado: { tex: 'carpetAvocado', scale: [1, 1] },
-  carpetBlue: { tex: 'carpetBlue', scale: [1, 1] },
-  wallpaperStripe: { tex: 'wallpaperStripe', scale: [1, 1] },
-  wallpaperOval: { tex: 'wallpaperOval', scale: [1, 1] },
-  wainscot: { tex: 'wainscot', scale: [2, 4] },
-  walnut: { tex: 'walnut', scale: [1, 1] },
-  woodVeneer: { tex: 'woodVeneer', scale: [0.6, 0.6] },
-  woodDoor: { tex: 'woodDoor', scale: [0.92, 2.05] },
-  acoustic: { tex: 'acoustic', scale: [1.2, 1.2] },
-  terrazzo: { tex: 'terrazzo', scale: [2, 2] },
-  vinylCheck: { tex: 'vinylCheck', scale: [1.2, 1.2] },
-  paintMint: { tex: 'paintMint', scale: [1.6, 1.6] },
-  paintCream: { tex: 'paintCream', scale: [2, 2], color: 0xd8d0b8 },
+  // floors
+  sealedConcrete: { tex: 'sealedConcrete', scale: [4, 4] },
   concrete: { tex: 'concrete', scale: [2, 2] },
-  whiteTile: { tex: 'whiteTile', scale: [1.2, 1.2] },
-  stainless: { tex: 'stainless', scale: [0.8, 0.8], color: 0x8e908a },
-  fabricFloral: { tex: 'fabricFloral', scale: [0.6, 0.6] },
-  fabricOrange: { tex: 'fabricFloral', scale: [0.45, 0.45], color: 0xd08850 },
-  vinylOrange: { tex: 'vinylOrange', scale: [1, 1] },
-  vinylBrown: { tex: 'vinylBrown', scale: [1, 1] },
-  laminate: { tex: 'laminate', scale: [1, 1] },
+  asphalt: { tex: 'asphalt', scale: [3, 3] },
+  freezerFloor: { tex: 'freezerFloor', scale: [2.5, 2.5] },
+  carpetTile: { tex: 'carpetTile', scale: [2, 2] },
+  lino: { tex: 'lino', scale: [2.5, 2.5] },
+  quarryTile: { tex: 'quarryTile', scale: [1.2, 1.2] },
+  diamondPlate: { tex: 'diamondPlate', scale: [0.8, 0.8] },
+  steelGrate: { tex: 'steelGrate', scale: [0.5, 0.5] },
+  // walls
+  paintBlock: { tex: 'paintBlock', scale: [1.6, 1.6] },
+  paintBlockTeal: { tex: 'paintBlockTeal', scale: [1.6, 1.6] },
+  panelWhite: { tex: 'panelWhite', scale: [2.4, 2.4] },
+  corrugated: { tex: 'corrugated', scale: [1.6, 1.6] },
+  facade: { tex: 'facade', scale: [3, 3] },
+  plasterOffice: { tex: 'plasterOffice', scale: [2, 2] },
+  partition: { tex: 'partition', scale: [0.8, 0.8] },
+  vanInterior: { tex: 'vanInterior', scale: [1.2, 1.2] },
+  vanPaint: { tex: 'vanPaint', scale: [1.5, 1.5] },
+  // ceilings
+  ceilTile: { tex: 'ceilTile', scale: [1.2, 1.2] },
+  deckSteel: { tex: 'deckSteel', scale: [2.4, 2.4] },
+  // props
+  palletWood: { tex: 'palletWood', scale: [1.2, 1.2] },
+  cardboard: { tex: 'cardboard', scale: [0.6, 0.6] },
   paper: { tex: 'paper', scale: [0.25, 0.3] },
-  manila: { tex: 'manila', scale: [0.5, 0.5] },
-  paperTag: { tex: 'paperTag', scale: [0.2, 0.2] },
-  cardboard: { tex: 'cardboard', scale: [0.5, 0.5] },
-  mattress: { tex: 'mattress', scale: [1, 1] },
-  linen: { tex: 'linen', scale: [1, 1] },
+  laminate: { tex: 'laminate', scale: [1, 1] },
+  hazard: { tex: 'hazard', scale: [0.6, 0.6] },
+  stripPlastic: { tex: 'stripPlastic', scale: [1.2, 2.4] },
   doorFrame: { tex: 'doorFrame', scale: [1, 1] },
-  baseboard: { tex: 'baseboard', scale: [1, 1] },
   threshold: { tex: 'threshold', scale: [0.5, 0.5] },
-  clockFace: { tex: 'clockFace', scale: [1, 1] },
-  digits: { tex: 'digits', scale: [1, 1] },
+  stainless: { tex: 'stainless', scale: [0.8, 0.8], color: 0x9a9c98 },
+  tankSteel: { tex: 'stainless', scale: [1.6, 1.6], color: 0x8a8e8a },
+  noticeboard: { tex: 'noticeboard', scale: [1, 1] },
+  timecards: { tex: 'timecards', scale: [1, 1] },
+  bottles: { tex: 'bottles', scale: [0.4, 0.4] },
   signs: { tex: 'signs', scale: [1, 1] },
-  mirror: { tex: 'mirror', scale: [1, 1] },
+  baseboard: { color: 0x2c2c2a },
   // untextured
   chrome: { color: 0xb8bcbe },
-  brass: { color: 0xb08a3e },
-  blackPlastic: { color: 0x1c1a18 },
-  beigePlastic: { color: 0xc8b896 },
-  ceramic: { color: 0xd8d2c0 },
-  soil: { color: 0x2a2018 },
-  leaf: { color: 0x3c5a28 },
-  sand: { color: 0xb8a882 },
+  brass: { color: 0xa08640 },
+  blackPlastic: { color: 0x1c1c1a },
+  beigePlastic: { color: 0xc4bca4 },
+  rubber: { color: 0x141414 },
   troffer: { color: 0xd8d6cc },
-  metalGrey: { color: 0x7c7f78 },
-  vendingBody: { color: 0x8a2a20 },
-  redPaint: { color: 0xa0201a },
-  parquet: { tex: 'parquet', scale: [1, 1] },
-  paintGrey: { tex: 'paintGrey', scale: [1.6, 1.6] },
-  flockRed: { tex: 'wallpaperOval', scale: [1, 1], color: 0xa85844 },
-  blueprint: { tex: 'blueprint', scale: [1, 1] },
-  planSheet: { tex: 'planSheet', scale: [1, 1] },
-  steelDark: { color: 0x3a3e3c },
-  velvet: { tex: 'fabricFloral', scale: [0.5, 0.5], color: 0x9a3a32 },
-  plasterWarm: { tex: 'paintCream', scale: [2, 2], color: 0xa89878 },
-  tablecloth: { tex: 'linen', scale: [1, 1], color: 0xe8e2d0 },
-  enamel: { color: 0xd6d4c8 },
-  draftBoard: { color: 0xc8c4ae },
-  glass: { color: 0x10120f },
+  metalGrey: { color: 0x7a7e7a },
+  steelDark: { color: 0x34393a },
+  steelPaint: { color: 0x3f6f6c }, // Halvard teal racking
+  oxblood: { color: 0x6e2420 },
+  safetyYellow: { color: 0xc89a26 },
+  enamelGreen: { color: 0x2f4a3e },
+  glass: { color: 0x0e1214 },
+  ice: { color: 0xd8e4ea },
+  copper: { color: 0xa0603a },
   // glow (emissive) surfaces: colour comes from the baked vertex colour
   lamp: { glow: true },
   shade: { glow: true, color: 0xffffff },
-  blinds: { glow: true, tex: 'blinds', scale: [1, 0.5] },
-  tvStatic: { glow: true, tex: 'tvStatic', scale: [1, 1], animate: 'static' },
   signsGlow: { glow: true, tex: 'signsGlow', scale: [1, 1] },
   vendingGlow: { glow: true, tex: 'vendingGlow', scale: [1, 1] },
-  scope: { glow: true, tex: 'scope', scale: [1, 1], animate: 'scroll' },
+  screen: { glow: true, tex: 'screen', scale: [1, 1], animate: 'flicker' },
 };
 
 // textures whose UVs are explicit (uvRect) rather than metres
-const EXPLICIT_UV = new Set(['clockFace', 'digits', 'signs', 'signsGlow', 'vendingGlow', 'scope', 'tvStatic', 'blueprint', 'planSheet']);
+const EXPLICIT_UV = new Set(['signs', 'signsGlow', 'vendingGlow', 'screen', 'timecards', 'noticeboard']);
 
 export class MaterialLibrary {
   constructor(renderer) {
@@ -228,18 +220,12 @@ function injectBake(mat, shared, glow, cell = null) {
         'vec4 diffuseColor = vec4( diffuse * vBake * darkK() * uDimG * vec3(1.0, 0.8 + 0.2 * uDimG, 0.55 + 0.45 * uDimG), opacity );',
       );
       shader.fragmentShader = shader.fragmentShader.replace('uniform float uTime;', 'uniform float uTime;\nuniform float uDimG;');      shader.uniforms.uDimG = uniforms.uDim;
-      if (mat.userData.animate === 'static') {
+      if (mat.userData.animate === 'flicker') {
+        // a CRT: a slow roll bar and a faint mains flicker
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <map_fragment>',
-          `vec2 suv = vMapUv + vec2(fract(sin(floor(uTime*24.0)*12.9898)*43758.5453), fract(sin(floor(uTime*24.0)*78.233)*43758.5453));
-           vec4 sampledDiffuseColor = texture2D( map, suv );
-           sampledDiffuseColor.rgb *= 0.8 + 0.2*sin(vMapUv.y*40.0 + uTime*7.0);
-           diffuseColor *= sampledDiffuseColor;`,
-        );
-      } else if (mat.userData.animate === 'scroll') {
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <map_fragment>',
-          `vec4 sampledDiffuseColor = texture2D( map, vMapUv + vec2(uTime*0.15, 0.0) );
+          `vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+           sampledDiffuseColor.rgb *= 0.86 + 0.1 * smoothstep(0.0, 0.1, abs(fract(vMapUv.y * 0.7 - uTime * 0.21) - 0.5)) + 0.04 * sin(uTime * 50.0);
            diffuseColor *= sampledDiffuseColor;`,
         );
       }

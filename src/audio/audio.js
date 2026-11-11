@@ -3,7 +3,8 @@
 
 import { RNG } from '../core/rng.js';
 
-const ROOM_IR = { large: 2.6, medium: 1.6, corridor: 1.9, small: 0.8 };
+// reverb tail length per room type; outdoors is a short slap off the facade and the hoarding
+const ROOM_IR = { large: 2.6, medium: 1.6, corridor: 1.9, small: 0.45, outdoor: 0.9 };
 
 export class AudioEngine {
   constructor() {
@@ -74,14 +75,18 @@ export class AudioEngine {
     const len = ROOM_IR[type] || 1.6;
     const sr = this.ctx.sampleRate;
     const b = this.ctx.createBuffer(2, Math.floor(sr * len), sr);
+    const outdoor = type === 'outdoor';
     for (let c = 0; c < 2; c++) {
       const d = b.getChannelData(c);
       for (let i = 0; i < d.length; i++) {
         const t = i / d.length;
-        d[i] = (this.rng.next() * 2 - 1) * Math.pow(1 - t, 3.2) * (i < sr * 0.004 ? 0 : 1);
+        // outdoors: sparse echoes instead of a dense tail
+        const sparse = outdoor ? (this.rng.next() < 0.02 ? 3 : 0.15) : 1;
+        d[i] = (this.rng.next() * 2 - 1) * Math.pow(1 - t, outdoor ? 5 : 3.2) * sparse * (i < sr * (outdoor ? 0.03 : 0.004) ? 0 : 1);
       }
     }
     this.verb.buffer = b;
+    this.verbGain.gain.setTargetAtTime(outdoor ? 0.2 : type === 'small' ? 0.25 : 0.35, this.ctx.currentTime, 0.3);
   }
 
   // ---- the bed: ballast hum + HVAC ---------------------------------------------------------
@@ -256,16 +261,34 @@ export class AudioEngine {
     fn(this, spot.input, this.ctx.currentTime + (opts.delay || 0), opts);
   }
 
-  step(surface, run, crouch) {
+  step(surface, run, crouch, heavy = false) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
-    const vol = (run ? 1.25 : crouch ? 0.45 : 0.85) * this.rng.float(0.8, 1.1);
+    const vol = (run ? 1.25 : crouch ? 0.45 : 0.85) * (heavy ? 1.2 : 1) * this.rng.float(0.8, 1.1);
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuf;
     const f = ctx.createBiquadFilter();
     const g = ctx.createGain();
-    if (surface === 'hard') {
+    if (surface === 'metal') {
+      // diamond plate and grating: a ringing clank under the boot
+      f.type = 'bandpass';
+      f.frequency.value = 2300 + this.rng.float(-300, 300);
+      f.Q.value = 3;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.14 * vol, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + 0.14);
+      for (const fr of [410, 1130]) {
+        const o = ctx.createOscillator();
+        o.frequency.value = fr * this.rng.float(0.97, 1.03);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0.025 * vol, t);
+        og.gain.exponentialRampToValueAtTime(0.0003, t + 0.22);
+        o.connect(og).connect(this.master);
+        o.start(t);
+        o.stop(t + 0.25);
+      }
+    } else if (surface === 'hard') {
       f.type = 'bandpass';
       f.frequency.value = 1400 + this.rng.float(-200, 300);
       f.Q.value = 0.9;
@@ -294,7 +317,7 @@ export class AudioEngine {
     }
     src.connect(f).connect(g).connect(this.master);
     const send = ctx.createGain();
-    send.gain.value = surface === 'hard' ? 0.35 : 0.08;
+    send.gain.value = surface === 'soft' ? 0.08 : 0.35;
     g.connect(send).connect(this.verb);
     src.start(t, this.rng.float(0, 2.5));
     src.stop(t + 0.25);
@@ -365,115 +388,120 @@ function noiseBurst(ae, out, t, { type = 'bandpass', freq = 2000, q = 1, peak = 
   src.stop(t + a + d + 0.05);
 }
 
+function sweep(ae, out, t, f0, f1, dur, type = 'sine', peak = 0.1, a = 0.01) {
+  const o = ae.ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const g = ae.ctx.createGain();
+  env(g, t, a, peak, dur);
+  o.connect(g).connect(out);
+  o.start(t);
+  o.stop(t + a + dur + 0.05);
+  return o;
+}
+
 const SOUNDS = {
-  deskBell(ae, out, t) {
-    for (const [m, g, d] of [[1, 0.22, 2.4], [2.76, 0.1, 1.4], [5.4, 0.05, 0.8], [8.9, 0.02, 0.4]]) tone(ae, out, t, 1820 * m, 'sine', g, 0.002, d);
-    noiseBurst(ae, out, t, { freq: 6000, peak: 0.08, d: 0.02 });
-  },
-  elevatorChime(ae, out, t) {
-    tone(ae, out, t, 659, 'sine', 0.12, 0.01, 2.2);
-    tone(ae, out, t, 1318, 'sine', 0.03, 0.01, 1.2);
-    tone(ae, out, t + 0.55, 523, 'sine', 0.12, 0.01, 2.6);
-    tone(ae, out, t + 0.55, 1046, 'sine', 0.03, 0.01, 1.4);
-  },
-  distantPhone(ae, out, t) {
-    // two rings of an old bell phone
-    for (let r = 0; r < 2; r++) {
-      const t0 = t + r * 3.2;
-      const ctx = ae.ctx;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, t0);
-      g.gain.linearRampToValueAtTime(0.07, t0 + 0.02);
-      g.gain.setValueAtTime(0.07, t0 + 1.6);
-      g.gain.linearRampToValueAtTime(0, t0 + 1.7);
-      const am = ctx.createGain();
-      am.gain.value = 0.5;
-      const lfo = ctx.createOscillator();
-      lfo.type = 'square';
-      lfo.frequency.value = 20;
-      const lg = ctx.createGain();
-      lg.gain.value = 0.5;
-      lfo.connect(lg).connect(am.gain);
-      for (const f of [1046, 1560, 2350]) {
-        const o = ctx.createOscillator();
-        o.frequency.value = f;
-        o.connect(am);
-        o.start(t0);
-        o.stop(t0 + 1.8);
-      }
-      lfo.start(t0);
-      lfo.stop(t0 + 1.8);
-      am.connect(g).connect(out);
-    }
-  },
-  iceDrop(ae, out, t) {
-    for (let k = 0; k < 9; k++) noiseBurst(ae, out, t + ae.rng.float(0, 0.5), { freq: ae.rng.float(2500, 5000), q: 4, peak: 0.12, d: 0.04 });
-    noiseBurst(ae, out, t, { type: 'lowpass', freq: 300, peak: 0.12, d: 0.3 });
-  },
-  knock(ae, out, t) {
-    for (let k = 0; k < 3; k++) {
-      noiseBurst(ae, out, t + k * 0.28, { type: 'lowpass', freq: 380, peak: 0.6, d: 0.12 });
-      tone(ae, out, t + k * 0.28, 95, 'sine', 0.35, 0.002, 0.12);
-    }
-  },
-  paper(ae, out, t) {
-    for (let k = 0; k < 6; k++) noiseBurst(ae, out, t + k * 0.06 + ae.rng.float(0, 0.04), { freq: ae.rng.float(3000, 6000), q: 0.8, peak: 0.07, d: 0.08 });
-  },
+  // ---- the work ----
   click(ae, out, t) {
     noiseBurst(ae, out, t, { freq: 3500, q: 2, peak: 0.25, d: 0.015 });
     tone(ae, out, t, 900, 'square', 0.03, 0.001, 0.01);
   },
-  doorClose(ae, out, t) {
-    noiseBurst(ae, out, t, { type: 'lowpass', freq: 220, peak: 0.6, d: 0.35 });
-    tone(ae, out, t, 70, 'sine', 0.4, 0.002, 0.3);
-    noiseBurst(ae, out, t + 0.05, { freq: 2200, q: 3, peak: 0.08, d: 0.06 });
+  paper(ae, out, t) {
+    for (let k = 0; k < 6; k++) noiseBurst(ae, out, t + k * 0.06 + ae.rng.float(0, 0.04), { freq: ae.rng.float(3000, 6000), q: 0.8, peak: 0.07, d: 0.08 });
   },
-  hvac() {},
-  knockFar(ae, out, t) {
-    SOUNDS.knock(ae, out, t);
+  take(ae, out, t) {
+    // a scuff and a grunt of effort: cloth on metal
+    noiseBurst(ae, out, t, { freq: 1800, q: 0.7, peak: 0.14, a: 0.01, d: 0.12 });
+    noiseBurst(ae, out, t + 0.05, { type: 'lowpass', freq: 400, peak: 0.12, d: 0.08 });
   },
-  tvStaticBurst(ae, out, t) {
-    noiseBurst(ae, out, t, { freq: 3200, q: 0.5, peak: 0.1, a: 0.05, d: 1.4 });
+  setDown(ae, out, t) {
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 900, peak: 0.22, d: 0.07 });
+    tone(ae, out, t, 210, 'sine', 0.08, 0.002, 0.08);
   },
-  scopeBeep(ae, out, t) {
-    tone(ae, out, t, 1046, 'sine', 0.05, 0.005, 0.18);
-    tone(ae, out, t + 1.1, 1046, 'sine', 0.05, 0.005, 0.18);
+  thud(ae, out, t) {
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 260, peak: 0.6, d: 0.22 });
+    tone(ae, out, t, 62, 'sine', 0.45, 0.002, 0.25);
+    noiseBurst(ae, out, t + 0.01, { freq: 2600, q: 4, peak: 0.06, d: 0.12 });
   },
-  cartRattle(ae, out, t) {
-    for (let k = 0; k < 5; k++) noiseBurst(ae, out, t + k * 0.09 + ae.rng.float(0, 0.03), { freq: ae.rng.float(1800, 4200), q: 6, peak: 0.08, d: 0.05 });
+  smash(ae, out, t) {
+    // glass: a crack, a shower of bright ticks
+    noiseBurst(ae, out, t, { freq: 4800, q: 1, peak: 0.4, d: 0.05 });
+    for (let k = 0; k < 14; k++) noiseBurst(ae, out, t + 0.02 + ae.rng.float(0, 0.5), { freq: ae.rng.float(3500, 8000), q: 8, peak: ae.rng.float(0.04, 0.12), d: 0.04 });
+    tone(ae, out, t + 0.01, 2400, 'sine', 0.05, 0.001, 0.4);
   },
-  squeak(ae, out, t) {
-    const o = ae.ctx.createOscillator();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(1350, t);
-    o.frequency.linearRampToValueAtTime(1620, t + 0.18);
-    o.frequency.linearRampToValueAtTime(1410, t + 0.32);
-    const g = ae.ctx.createGain();
-    env(g, t, 0.03, 0.05, 0.3);
-    o.connect(g).connect(out);
-    o.start(t);
-    o.stop(t + 0.4);
+  chute(ae, out, t) {
+    // the night safe's drum: a hinge, a long metal slide, a heavy drop into the strongroom
+    sweep(ae, out, t, 420, 300, 0.25, 'sawtooth', 0.03);
+    noiseBurst(ae, out, t + 0.15, { freq: 1300, q: 1.2, peak: 0.12, a: 0.08, d: 0.55 });
+    noiseBurst(ae, out, t + 0.75, { type: 'lowpass', freq: 220, peak: 0.7, d: 0.3 });
+    tone(ae, out, t + 0.75, 55, 'sine', 0.4, 0.002, 0.35);
+    noiseBurst(ae, out, t + 0.76, { freq: 3100, q: 5, peak: 0.08, d: 0.2 });
   },
-  whisper(ae, out, t) {
-    // breathy formant noise: not words, just the shape of them
-    for (let k = 0; k < 7; k++) noiseBurst(ae, out, t + k * 0.13 + ae.rng.float(0, 0.05), { freq: ae.rng.pick([900, 1300, 2200, 2700]), q: 5, peak: 0.07, a: 0.04, d: 0.12 });
+  appraise(ae, out, t) {
+    // the appraisal bell: two struck notes from the strongroom, a ticket chattering out
+    for (const [f, dt] of [[1318, 0], [1975, 0.16]]) for (const [m, g, d] of [[1, 0.12, 1.4], [2.4, 0.04, 0.6]]) tone(ae, out, t + dt, f * m, 'sine', g, 0.002, d);
+    for (let k = 0; k < 10; k++) noiseBurst(ae, out, t + 0.45 + k * 0.035, { freq: 2600, q: 3, peak: 0.05, d: 0.02 });
   },
-  sting(ae, out, t) {
-    // not a sting: a low swell, the building leaning in
+  lever(ae, out, t) {
+    sweep(ae, out, t, 180, 90, 0.3, 'sawtooth', 0.05, 0.02);
+    noiseBurst(ae, out, t + 0.28, { type: 'lowpass', freq: 500, peak: 0.4, d: 0.1 });
+    noiseBurst(ae, out, t + 0.29, { freq: 3800, q: 4, peak: 0.1, d: 0.03 });
+  },
+  doorUnlock(ae, out, t) {
+    // the time-lock lets go: three bolts withdraw, then the door rolls aside
+    for (let k = 0; k < 3; k++) {
+      noiseBurst(ae, out, t + k * 0.18, { type: 'lowpass', freq: 600, peak: 0.45, d: 0.08 });
+      noiseBurst(ae, out, t + k * 0.18, { freq: 3000, q: 5, peak: 0.06, d: 0.03 });
+    }
+    noiseBurst(ae, out, t + 0.7, { freq: 700, q: 0.8, peak: 0.12, a: 0.1, d: 0.9 });
+    noiseBurst(ae, out, t + 1.7, { type: 'lowpass', freq: 300, peak: 0.5, d: 0.2 });
+  },
+  horn(ae, out, t) {
+    // the Strongbox's air horn: two flat blasts, the second longer
+    for (const [t0, d] of [[0, 0.7], [1.0, 1.6]]) {
+      for (const f of [233, 277, 349]) {
+        const o = ae.ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        const fl = ae.ctx.createBiquadFilter();
+        fl.type = 'lowpass';
+        fl.frequency.value = 1400;
+        const g = ae.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t + t0);
+        g.gain.linearRampToValueAtTime(0.06, t + t0 + 0.05);
+        g.gain.setValueAtTime(0.06, t + t0 + d);
+        g.gain.linearRampToValueAtTime(0.0001, t + t0 + d + 0.15);
+        o.connect(fl).connect(g).connect(out);
+        o.start(t + t0);
+        o.stop(t + t0 + d + 0.2);
+      }
+    }
+  },
+  engine(ae, out, t) {
+    // a diesel turning over and pulling away, heard from inside the box
     const o = ae.ctx.createOscillator();
     o.type = 'sawtooth';
-    o.frequency.setValueAtTime(55, t);
-    o.frequency.linearRampToValueAtTime(52, t + 3);
+    o.frequency.setValueAtTime(28, t);
+    o.frequency.linearRampToValueAtTime(42, t + 1.2);
+    o.frequency.linearRampToValueAtTime(36, t + 3.5);
     const f = ae.ctx.createBiquadFilter();
     f.type = 'lowpass';
-    f.frequency.value = 240;
+    f.frequency.value = 180;
     const g = ae.ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.18, t + 1.6);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
+    g.gain.linearRampToValueAtTime(0.35, t + 0.6);
+    g.gain.setValueAtTime(0.35, t + 2.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.0);
     o.connect(f).connect(g).connect(out);
     o.start(t);
-    o.stop(t + 3.6);
+    o.stop(t + 4.1);
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 160, peak: 0.25, a: 0.4, d: 3.4 });
+  },
+  breaker(ae, out, t) {
+    // somewhere a breaker trips: a flat bang and the hum under it dropping away
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 700, peak: 0.6, d: 0.12 });
+    sweep(ae, out, t + 0.02, 100, 40, 1.4, 'sawtooth', 0.06);
   },
   tubePop(ae, out, t) {
     // a fluorescent tube giving out: a hard tick, a glassy ping, the ballast buzz dying away
@@ -492,19 +520,103 @@ const SOUNDS = {
     o.start(t);
     o.stop(t + 0.7);
   },
-  checkIn(ae, out, t) {
-    // the bell, reversed-feeling: soft attack, sudden stop
-    for (const [m, gg] of [[1, 0.15], [2.76, 0.06]]) {
-      const o = ae.ctx.createOscillator();
-      o.frequency.value = 1820 * m;
-      const g = ae.ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(gg, t + 1.6);
-      g.gain.linearRampToValueAtTime(0, t + 1.62);
-      o.connect(g).connect(out);
-      o.start(t);
-      o.stop(t + 1.7);
+  sting(ae, out, t) {
+    // a low swell: the building leaning in
+    const o = ae.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(55, t);
+    o.frequency.linearRampToValueAtTime(52, t + 3);
+    const f = ae.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 240;
+    const g = ae.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 1.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
+    o.connect(f).connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 3.6);
+  },
+
+  // ---- ambience: the building settling, far off ----
+  drip(ae, out, t) {
+    sweep(ae, out, t, 1400 + ae.rng.float(0, 600), 2600, 0.05, 'sine', 0.05, 0.002);
+  },
+  ventTick(ae, out, t) {
+    for (let k = 0; k < 3; k++) noiseBurst(ae, out, t + k * ae.rng.float(0.2, 0.5), { freq: 2200, q: 6, peak: 0.07, d: 0.02 });
+  },
+  rackCreak(ae, out, t) {
+    sweep(ae, out, t, 160, 120, 1.2, 'sawtooth', 0.025, 0.3);
+    noiseBurst(ae, out, t + 1.1, { type: 'lowpass', freq: 400, peak: 0.2, d: 0.1 });
+  },
+  compressor(ae, out, t) {
+    // a refrigeration compressor cutting in, running a few seconds, cutting out
+    const o = ae.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = 49;
+    const f = ae.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 300;
+    const g = ae.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.08, t + 0.4);
+    g.gain.setValueAtTime(0.08, t + 4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 5);
+    o.connect(f).connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 5.1);
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 500, peak: 0.25, d: 0.1 });
+  },
+  iceTick(ae, out, t) {
+    for (let k = 0; k < 4; k++) noiseBurst(ae, out, t + ae.rng.float(0, 1.2), { freq: ae.rng.float(4000, 7000), q: 9, peak: 0.05, d: 0.015 });
+  },
+  paperSlide(ae, out, t) {
+    noiseBurst(ae, out, t, { freq: 4200, q: 0.6, peak: 0.06, a: 0.2, d: 0.6 });
+    noiseBurst(ae, out, t + 0.8, { type: 'lowpass', freq: 600, peak: 0.12, d: 0.08 });
+  },
+  crankTurn(ae, out, t) {
+    // a mobile shelving bay's wheel turned by someone, a few clicks and a heavy roll
+    for (let k = 0; k < 5; k++) noiseBurst(ae, out, t + k * 0.22, { freq: 2600, q: 5, peak: 0.05, d: 0.02 });
+    noiseBurst(ae, out, t + 0.3, { type: 'lowpass', freq: 200, peak: 0.25, a: 0.2, d: 0.9 });
+  },
+  typeKey(ae, out, t) {
+    // one typewriter key, struck, and then nothing
+    noiseBurst(ae, out, t, { freq: 2800, q: 3, peak: 0.2, d: 0.03 });
+    noiseBurst(ae, out, t + 0.012, { type: 'lowpass', freq: 500, peak: 0.12, d: 0.04 });
+  },
+  phoneFar(ae, out, t) {
+    // an internal phone: a single electronic warble, twice
+    for (let r = 0; r < 2; r++) for (let k = 0; k < 8; k++) tone(ae, out, t + r * 1.4 + k * 0.05, k % 2 ? 1180 : 940, 'square', 0.012, 0.002, 0.045);
+  },
+  lockerBang(ae, out, t) {
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 900, peak: 0.4, d: 0.15 });
+    noiseBurst(ae, out, t, { freq: 1900, q: 6, peak: 0.12, d: 0.5 });
+    tone(ae, out, t, 340, 'sine', 0.06, 0.001, 0.4);
+  },
+  pipeKnock(ae, out, t) {
+    for (let k = 0; k < 3; k++) {
+      noiseBurst(ae, out, t + k * 0.33, { type: 'lowpass', freq: 600, peak: 0.3, d: 0.06 });
+      tone(ae, out, t + k * 0.33, 520 + k * 15, 'sine', 0.05, 0.001, 0.6);
     }
+  },
+  bottleClink(ae, out, t) {
+    for (let k = 0; k < 4; k++) tone(ae, out, t + k * ae.rng.float(0.08, 0.2), ae.rng.float(2600, 3600), 'sine', 0.04, 0.001, 0.3);
+  },
+  shutterRattle(ae, out, t) {
+    for (let k = 0; k < 12; k++) noiseBurst(ae, out, t + k * 0.05 + ae.rng.float(0, 0.02), { freq: ae.rng.float(600, 1400), q: 3, peak: 0.08, d: 0.04 });
+  },
+  dogFar(ae, out, t) {
+    // a dog a long way off: two short barks
+    for (let k = 0; k < 2; k++) {
+      sweep(ae, out, t + k * 0.42, 520, 330, 0.14, 'sawtooth', 0.04, 0.01);
+      noiseBurst(ae, out, t + k * 0.42, { freq: 900, q: 2, peak: 0.05, d: 0.12 });
+    }
+  },
+  traffic(ae, out, t) {
+    noiseBurst(ae, out, t, { type: 'lowpass', freq: 350, peak: 0.1, a: 2.2, d: 3.5 });
+  },
+  windGust(ae, out, t) {
+    noiseBurst(ae, out, t, { freq: 500, q: 0.6, peak: 0.08, a: 1.4, d: 2.4 });
   },
 };
 
@@ -523,56 +635,6 @@ const LOOPS = {
     src.connect(f).connect(g).connect(out);
     src.start();
     return [() => src.stop()];
-  },
-  muzak(ae, out) {
-    // a warped, slow easy-listening phrase from a ceiling speaker
-    const ctx = ae.ctx;
-    const notes = [392, 440, 494, 440, 392, 330, 349, 392, 330, 294];
-    const g = ctx.createGain();
-    g.gain.value = 0.05;
-    const f = ctx.createBiquadFilter();
-    f.type = 'bandpass';
-    f.frequency.value = 900;
-    f.Q.value = 0.6;
-    const wob = ctx.createOscillator();
-    wob.frequency.value = 0.3;
-    const wg = ctx.createGain();
-    wg.gain.value = 6;
-    wob.connect(wg);
-    wob.start();
-    g.connect(f).connect(out);
-    let stopped = false;
-    let k = 0;
-    const tick = () => {
-      if (stopped) return;
-      const t = ctx.currentTime;
-      const o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.value = notes[k % notes.length] * 0.97;
-      wg.connect(o.detune);
-      const e = ctx.createGain();
-      env(e, t, 0.08, 0.5, 0.9);
-      o.connect(e).connect(g);
-      o.start(t);
-      o.stop(t + 1.1);
-      k++;
-      setTimeout(tick, 820);
-    };
-    tick();
-    return [() => (stopped = true), () => wob.stop()];
-  },
-  wheel(ae, out) {
-    // a cart wheel: rhythmic squeak and rattle
-    let stopped = false;
-    const tick = () => {
-      if (stopped) return;
-      const t = ae.ctx.currentTime;
-      SOUNDS.squeak(ae, out, t);
-      if (ae.rng.chance(0.6)) SOUNDS.cartRattle(ae, out, t + 0.2);
-      setTimeout(tick, 640 + ae.rng.float(-60, 60));
-    };
-    tick();
-    return [() => (stopped = true)];
   },
   hush(ae, out) {
     // the sound of a room with its lights out: pressure, a slow sub-tone, no hum at all

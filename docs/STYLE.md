@@ -1,50 +1,57 @@
-# STYLE
+# Style
 
-The Meridian Lodge, 1971-1979, recorded on a cheap camcorder by someone who should not be there.
+**Night Receivers**: a co-op salvage horror game. A debtor crew strips abandoned Halvard
+facilities at night for Grisholm & Daughters, Receivers, to make the instalment.
+Tagline: *Everything must go.*
 
-## Era
+## Tone
 
-Early-1970s American motor hotel and research facility. Nothing newer than 1979: no plastic
-LEDs, no flat screens, no modern signage fonts. Labels look typed, stencilled or letterpress.
+Dread first, with the dry humour of paperwork: the writs, the shop terminal, the van's
+governor and the creatures' job titles are all a little too official. The horror is never
+gory. When something gets you, the helmet camera loses signal and you are "clocked out".
+
+## Era and place
+
+An unplaced, slightly late industrial decade: tube fluorescents and sodium yard lamps,
+punch clocks, dot-matrix terminals, roller shutters, pallet racking, typing pools, cold rooms.
+Halvard's corporate colours are a faded **teal and oxblood**; its signage is stencilled, not
+backlit. No real brands, no real logos.
+
+## The camera (grade)
+
+Everything is seen through a cheap insurer-issued **helmet camera**, not a camcorder:
+- digital, not tape: blocky low-light gain noise instead of film grain, crushed shadows with a
+  cold blue-grey toe, sodium and tungsten highlights that clip orange-white;
+- a wide lens with strong barrel distortion and corner softness;
+- auto exposure that hunts slowly when you move between dark and light;
+- compression smear and a dropped-frame stutter when a creature is close (not tracking lines);
+- an overlay: crew ID, a 24-hour clock, the insurer's watermark, and a face-detection box that
+  sometimes finds people who are not your crew.
 
 ## Light sources
 
-- Fluorescent tubes in ceiling troffers: cool white with a sick green cast (about 4100 K, green
-  bias). The main light everywhere. Some flicker; none are ever off.
-- Incandescent wall sconces and table lamps: warm amber pools, yellowed shades.
-- Red EXIT signs and stair-well lamps: the only saturated red.
-- Ice-machine and vending-machine glow: cold blue-white.
-- Television static: flickering grey-blue light from rooms where a set is still on.
-- Darkness is rare and always wrong. Where it exists, it is a threat.
+- Exterior: sodium lamps on poles (deep orange), the Strongbox's amber clearance lights.
+- Facilities: banks of tube fluorescents on a failing standby supply. They grey and brown out as
+  the night goes on; whole banks drop out after midnight.
+- Cold rooms: blue-white sealed fittings behind frosted lenses.
+- The crew's own headlamps, which are the only real-time light.
 
 ## Materials
 
-- Carpet: worn low-pile, harvest gold, rust orange or avocado, with a repeating geometric
-  pattern and darker wear paths down the middle of corridors.
-- Walls: patterned wallpaper (stripes, interlocking ovals) going yellow and peeling at seams;
-  dark walnut panelling in the lobby and offices.
-- Ceilings: stained acoustic tiles in a grid, some missing.
-- Floors elsewhere: terrazzo in the lobby, chequered vinyl in the kitchen and labs.
-- Furniture: chrome and vinyl chairs, laminate desks, rotary phones, room-key boards.
-- Everything is clean enough to be used and dirty enough to be old. Water stains, sun-faded
-  edges, cigarette burns.
+Sealed concrete with worn safety-yellow lines, painted block, insulated white freezer panels,
+corrugated steel, oxblood roller shutters, teal-painted steel racking, grey carpet tile and
+melamine desks, frosted plastic strip curtains, diamond-plate steel inside the van.
 
 ## Sounds
 
-- Fluorescent ballast hum (60 Hz plus harmonics) under everything, slightly different per room.
-- HVAC breath, ice machine drops, distant elevator chime, a phone ringing two rooms away.
-- Muffled easy-listening music from a ceiling speaker, slowed and warped.
-- Footsteps on carpet are soft; on terrazzo, they echo.
-- No orchestral score. Silence is used as a sound.
-
-## Camera
-
-Found-footage camcorder: soft focus, film grain, slight chromatic fringing, vignette, gentle
-handheld sway, scan lines, a timestamp that never advances properly.
+Generator drone and the tick of failing ballasts; refrigeration compressors; HVAC breathing;
+the van's diesel idle outside; roller shutters; the clank of the night-safe chute and the
+appraisal bell; footsteps that change on concrete, steel plate and carpet. Each creature has a
+signature sound you can learn (a tuning-fork drone, tubes popping, a tally counter clicking,
+a whistled tune).
 
 ## Three things this game never does
 
-1. Never shows gore, blood, or a body.
-2. Never jump-scares with a loud sting out of nowhere; every threat is telegraphed by sound or
-   light first and can be avoided by paying attention.
-3. Never explains itself: no narrator, no lore dump, no text that states what happened here.
+1. Never shows gore, bodies or wounds. Being caught is a camera cut and a lost signal.
+2. Never spawns a creature without a tell the player could have noticed first.
+3. Never uses real brands, real companies or anything recognisable from another game.

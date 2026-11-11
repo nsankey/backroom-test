@@ -1,10 +1,8 @@
-// The moment-scripting API. Kinds, hunters and residents script small scenes with it:
+// The moment-scripting API. Kinds and creatures script small scenes with it:
 //   caption(text, secs)   subtitle at the bottom of the frame
 //   sound(name, pos)      positional one-shot (pos = {x, y, z} world, or null for 2D)
 //   after(secs, fn)       run fn later, on the simulation tick (deterministic timing)
 //   use(point, prompt, fn)  register a temporary "press E" interaction at a world point
-//   sit(point)            seat the player there until they move
-//   discover(key, text)   add a logbook entry once
 // Timers run off the shared tick, never wall-clock time.
 
 import { TICK_HZ } from './constants.js';
@@ -30,8 +28,6 @@ export class Moments {
       sound: (name, pos = at, opts) => g.audio.play(name, pos, opts),
       after: (secs, fn) => this.after(secs, fn),
       use: (p, prompt, fn, radius = 1.4) => this.use(p, prompt, fn, radius),
-      sit: (p, yaw) => g.sit(p, yaw),
-      discover: (key, text) => g.discover(key, text),
       pick: (arr) => arr[Math.floor(rng.next() * arr.length)],
       chance: (p) => rng.next() < p,
       player: g.player,

@@ -1,79 +1,103 @@
-// World: streams cells around the player from the cell worker, builds their meshes, and
-// answers spatial queries (walkable? ceiling? colliders?) for the simulation.
+// World: loads every cell of the site being worked (a finite building) from a pair of cell
+// workers, builds their meshes, and answers spatial queries (walkable? ceiling? colliders?) for
+// the simulation. Cells that are not part of the site do not exist: they collide as solid.
 
 import * as THREE from 'three';
 import { CELL, TILE, N, cellKey } from './constants.js';
 import { KINDS } from './kinds/index.js';
+import { siteLayout } from './site.js';
 
-const LOAD_RADIUS = 1; // 3 x 3 cells around the player
-const KEEP_RADIUS = 2;
+const WORKERS = 2;
+const VIEW_DIST = 30; // cells further than this from the camera are hidden (fog covers it)
 
 export class World {
-  constructor(scene, materials, worldSeed) {
+  constructor(scene, materials) {
     this.scene = scene;
     this.mats = materials;
-    this.seed = worldSeed;
+    this.site = null; // { worldSeed, siteId, night }
     this.cells = new Map(); // key -> cell
     this.requested = new Map(); // key -> promise
-    this.worker = new Worker(new URL('./cell.worker.js', import.meta.url), { type: 'module' });
+    this.workers = [];
+    for (let k = 0; k < WORKERS; k++) {
+      const w = new Worker(new URL('./cell.worker.js', import.meta.url), { type: 'module' });
+      w.onmessage = (e) => {
+        const { id, data, error } = e.data;
+        const h = this.waiting.get(id);
+        this.waiting.delete(id);
+        if (error) {
+          console.error('cell generation failed', error);
+          h?.reject(new Error(error));
+        } else h?.resolve(data);
+      };
+      this.workers.push(w);
+    }
     this.nextId = 1;
     this.waiting = new Map();
-    this.worker.onmessage = (e) => {
-      const { id, data, error } = e.data;
-      const w = this.waiting.get(id);
-      this.waiting.delete(id);
-      if (error) {
-        console.error('cell generation failed', error);
-        w?.reject(new Error(error));
-      } else w?.resolve(data);
-    };
     this.buildQueue = [];
     this.onCellAdded = null;
-    this.kindOverrides = new Map(); // debug: force a kind at a cell ("jump to a kind")
+    this.onCellRemoved = null;
+    this.kindOverrides = new Map(); // debug: force a kind at a cell
+    this.dynamic = []; // extra world-space boxes [x0, z0, x1, z1] (the van door while locked)
   }
 
   generate(cx, cz, kindOverride = this.kindOverrides.get(cellKey(cx, cz)) || null) {
     const id = this.nextId++;
+    const w = this.workers[id % this.workers.length];
     return new Promise((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });
-      this.worker.postMessage({ id, worldSeed: this.seed, cx, cz, kindOverride });
+      w.postMessage({ id, site: this.site, cx, cz, kindOverride });
     });
   }
 
-  /** Make sure the cells around (x, z) are loaded; returns a promise for the centre cell. */
-  ensureAround(x, z) {
-    const ccx = Math.floor(x / CELL);
-    const ccz = Math.floor(z / CELL);
-    const order = [];
-    for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++)
-      for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) order.push([ccx + dx, ccz + dz, Math.abs(dx) + Math.abs(dz)]);
-    order.sort((a, b) => a[2] - b[2]);
-    for (const [cx, cz] of order) this.request(cx, cz);
-    // unload far cells
-    for (const [key, cell] of this.cells) {
-      if (Math.abs(cell.cx - ccx) > KEEP_RADIUS || Math.abs(cell.cz - ccz) > KEEP_RADIUS) this.unload(key);
-    }
-    return this.requested.get(cellKey(ccx, ccz));
+  /**
+   * Switch to a site: drop the old building (the yard is the same everywhere and stays) and load
+   * every cell of the new one. Resolves when all cells are built; onProgress(done, total).
+   */
+  async setSite(site, onProgress = () => {}) {
+    const same = this.site && this.site.worldSeed === site.worldSeed && this.site.siteId === site.siteId && this.site.night === site.night;
+    if (same && this.cells.size === this.layout.cells.size) return;
+    this.site = { ...site };
+    this.layout = siteLayout(site.worldSeed, site.siteId, site.night);
+    for (const key of [...this.requested.keys()]) if (key !== '0,0' || !this.cells.has('0,0')) this.unload(key);
+    const list = [...this.layout.cells.values()].sort((a, b) => Math.abs(a.cx) + Math.abs(a.cz) - (Math.abs(b.cx) + Math.abs(b.cz)));
+    let done = 0;
+    const total = list.length;
+    const ps = list.map((c) =>
+      this.request(c.cx, c.cz).then((cell) => {
+        onProgress(++done, total);
+        return cell;
+      }),
+    );
+    await Promise.all(ps);
   }
 
   request(cx, cz) {
     const key = cellKey(cx, cz);
     if (this.requested.has(key)) return this.requested.get(key);
     const p = this.generate(cx, cz).then((data) => {
-      if (!this.requested.has(key)) return null; // unloaded while generating
-      return new Promise((resolve) => this.buildQueue.push({ data, resolve }));
+      if (this.requested.get(key) !== p) return null; // unloaded while generating
+      return new Promise((resolve) => this.buildQueue.push({ data, resolve, p }));
     });
     this.requested.set(key, p);
     return p;
+  }
+
+  /** Hide cells too far from the camera to be seen through the haze. */
+  cull(x, z) {
+    for (const c of this.cells.values()) {
+      const nx = Math.max(c.ox, Math.min(x, c.ox + CELL));
+      const nz = Math.max(c.oz, Math.min(z, c.oz + CELL));
+      c.group.visible = Math.hypot(nx - x, nz - z) < VIEW_DIST;
+    }
   }
 
   /** Build at most one queued cell per frame, to keep frame times flat. */
   update(maxMs = 4) {
     const t0 = performance.now();
     while (this.buildQueue.length && performance.now() - t0 < maxMs) {
-      const { data, resolve } = this.buildQueue.shift();
+      const { data, resolve, p } = this.buildQueue.shift();
       const key = cellKey(data.cx, data.cz);
-      if (!this.requested.has(key)) {
+      if (this.requested.get(key) !== p) {
         resolve(null);
         continue;
       }
@@ -202,6 +226,7 @@ export class World {
         out.push([bx0, bz0, bx1, bz1]);
       }
     }
+    for (const b of this.dynamic) if (!(b[2] < x - reach || b[0] > x + reach || b[3] < z - reach || b[1] > z + reach)) out.push(b);
     return out;
   }
 
@@ -307,7 +332,7 @@ export class World {
 
   dispose() {
     for (const key of [...this.cells.keys()]) this.unload(key);
-    this.worker.terminate();
+    for (const w of this.workers) w.terminate();
   }
 }
 

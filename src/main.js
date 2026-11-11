@@ -1,16 +1,16 @@
 import { Game } from './game/game.js';
 import { Save } from './game/save.js';
+import { newRun } from './game/run.js';
 import { UI } from './ui/ui.js';
-import { mapPanel, logPanel, discoveriesPanel, optionsPanel, paperPanel } from './ui/panels.js';
-import FRAGMENTS from '../lore/fragments.json';
+import { terminalPanel, mapPanel, reportPanel, overPanel, optionsPanel } from './ui/panels.js';
+import { fmtH } from './game/items.js';
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug');
 const $ = (s) => document.querySelector(s);
 
 const save = new Save();
-if (params.has('fresh')) save.reset(params.has('seed') ? Number(params.get('seed')) || 0 : undefined);
-else if (params.has('seed')) save.data.worldSeed = Number(params.get('seed')) || 0;
+if (params.has('fresh')) save.reset();
 
 const ui = new UI();
 if (debug) ui.show('#debug');
@@ -18,20 +18,26 @@ if (debug) ui.show('#debug');
 let game = null;
 
 async function boot() {
-  const canvas = $('#view');
-  game = new Game({ canvas, ui, save, worldSeed: save.data.worldSeed, debug, kindAtOrigin: params.get('kind') });
+  game = new Game({ canvas: $('#view'), ui, save, debug });
   window.__game = game;
   window.__save = save;
   applySettings(save.data.settings);
-  game.onUiAction = (name, arg) => openPanel(name, 'game', arg);
-  $('#loading').textContent = 'rewinding tape...';
-  await game.load((msg) => ($('#loading').textContent = msg + '...'));
+  game.onUiAction = (name, arg) => onGameUi(name, arg);
+  $('#loading').textContent = 'warming the sensor...';
+  await game.boot();
   $('#loading').textContent = '';
-  if (save.data.player) {
-    $('#btn-continue').classList.remove('hidden');
-    $('#btn-new').textContent = 'New tape';
-  }
-  if (params.has('autostart')) enter();
+  refreshTitle();
+  if (params.has('autostart')) await (save.data.run ? continueContract() : newContract());
+}
+
+function refreshTitle() {
+  const r = save.data.run;
+  $('#btn-continue').classList.toggle('hidden', !r);
+  if (r) $('#btn-continue').textContent = `Continue contract (night ${r.night}, ledger ${fmtH(r.ledger)})`;
+  $('#btn-new').textContent = r ? 'Sign a new contract' : 'Sign a contract';
+  delete $('#btn-new').dataset.armed;
+  const rec = save.data.records;
+  $('#records').textContent = rec.contracts ? `Best: ${rec.nights} nights · ${rec.paid} instalments paid · ${fmtH(rec.banked)} banked` : '';
 }
 
 function applySettings(s) {
@@ -47,6 +53,34 @@ function lockPointer() {
   } catch {
     /* pointer lock may be unavailable (automation, iframes) */
   }
+}
+
+async function load(run) {
+  ui.show('#title', false);
+  ui.show('#travel', true);
+  $('#travel-eyebrow').textContent = 'STRONGBOX · DEPOT';
+  $('#travel-site').textContent = `NIGHT ${run.night}`;
+  $('#travel-blurb').textContent = 'Checking the van out of the depot.';
+  ui.travelProgress(0, 1);
+  await game.startContract(run, (msg) => ($('#travel-blurb').textContent = msg + '...'));
+  ui.show('#travel', false);
+  enter();
+  if (run.night === 1 && !run.history.length) {
+    setTimeout(() => ui.caption('Use the terminal (E) to choose tonight\'s writ, then pull the governor by the door.', 7), 900);
+  }
+}
+
+async function newContract() {
+  game.audio.init();
+  const seed = params.has('seed') ? Number(params.get('seed')) || 0 : save.newSeed();
+  const run = newRun(seed);
+  save.checkpoint(run);
+  await load(run);
+}
+
+async function continueContract() {
+  game.audio.init();
+  await load(JSON.parse(JSON.stringify(save.data.run)));
 }
 
 function enter() {
@@ -70,32 +104,32 @@ function toTitle() {
   ui.show('#panel', false);
   ui.show('#hud', false);
   ui.show('#title', true);
-  if (save.data.player) {
-    $('#btn-continue').classList.remove('hidden');
-    $('#btn-new').textContent = 'New tape';
-  }
+  panel = null;
+  refreshTitle();
 }
-
-/** Reload into a fresh world (new tape, imported code). Keeps debug flags, drops seed/fresh. */
-function rewind() {
-  const q = new URLSearchParams(location.search);
-  q.delete('fresh');
-  q.delete('seed');
-  q.delete('kind');
-  rewinding = true; // don't let the unload autosave write the old tape back
-  location.search = q.toString().replace(/=(&|$)/g, '$1');
-}
-let rewinding = false;
 
 // ---- panels -------------------------------------------------------------------------------------
 
 let panel = null; // { name, from }
-const PANEL_KEYS = { map: ['KeyM', 'Tab'], log: ['KeyL', 'KeyJ'], paper: ['KeyE'] };
+const PANEL_KEYS = { map: ['KeyM', 'Tab'], terminal: ['KeyE'] };
+
+function onGameUi(name, arg) {
+  if (name === 'travel') {
+    ui.show('#travel', true);
+    $('#travel-eyebrow').textContent = `EN ROUTE · NIGHT ${arg.night}`;
+    $('#travel-site').textContent = `${arg.site.writ} · ${arg.site.name.toUpperCase()}`;
+    $('#travel-blurb').textContent = `${arg.site.place}. ${arg.site.blurb}`;
+    ui.travelProgress(0, 1);
+  } else if (name === 'travelDone') ui.show('#travel', false);
+  else openPanel(name, 'game', arg);
+}
 
 function openPanel(name, from, arg) {
   if (!game) return;
   if (from === 'game' && !panel) {
-    if (game.paused) return;
+    // the manifest always comes up, even over the pause screen; other panels need a live game
+    if (game.paused && name !== 'report') return;
+    ui.show('#pause', false);
     game.pause();
     try {
       document.exitPointerLock?.();
@@ -105,41 +139,45 @@ function openPanel(name, from, arg) {
   }
   const el = $('#panel');
   el.className = 'screen panel-' + name;
-  if (name === 'map') mapPanel(el, save, game);
-  else if (name === 'log') logPanel(el, save);
-  else if (name === 'discoveries') discoveriesPanel(el, save);
-  else if (name === 'paper') paperPanel(el, arg);
-  else if (name === 'options')
-    optionsPanel(el, save, {
-      onSettings: applySettings,
-      onImported: rewind,
-      onNewTape: () => {
-        save.newTape();
-        rewind();
+  const intent = (i) => game.session.applyIntent(game.pid, i);
+  if (name === 'map') mapPanel(el, game);
+  else if (name === 'terminal') terminalPanel(el, game, { onIntent: intent });
+  else if (name === 'options') optionsPanel(el, save, { onSettings: applySettings, onImported: () => location.reload() });
+  else if (name === 'report')
+    reportPanel(el, arg, game.session.state.run, {
+      onContinue: async () => {
+        el.innerHTML = '<div class="term"><p>Driving back...</p></div>';
+        const r = await game.afterReport();
+        if (r === 'over') {
+          const run = game.session.state.run;
+          save.endContract(run);
+          openPanel('over', 'over', run);
+        } else enter();
       },
+    });
+  else if (name === 'over')
+    overPanel(el, arg, {
+      onNew: () => {
+        panel = null;
+        ui.show('#panel', false);
+        newContract();
+      },
+      onTitle: toTitle,
     });
   panel = { name, from, arg };
   ui.show('#title', false);
   ui.show('#pause', false);
-  ui.show('#hud', from === 'game' && name === 'paper');
+  ui.show('#hud', false);
   ui.show(el, true);
   el.scrollTop = 0;
   el.querySelector('[data-close]')?.addEventListener('click', closePanel);
-  // logbook: documents can be read again
-  for (const b of el.querySelectorAll('[data-read]'))
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const doc = FRAGMENTS.fragments[b.dataset.read];
-      if (doc) openPanel('paper', from, { ...doc, kindId: b.dataset.read });
-    });
 }
 
 function closePanel() {
-  if (!panel) return;
-  const { from, name, arg } = panel;
+  if (!panel || panel.name === 'report' || panel.name === 'over') return;
+  const { from } = panel;
   panel = null;
   ui.show('#panel', false);
-  if (name === 'paper' && arg?.first) setTimeout(() => ui.caption('(Noted in the logbook.)', 2.5), 200);
   if (from === 'game') enter();
   else if (from === 'pause') ui.show('#pause', true);
   else ui.show('#title', true);
@@ -148,8 +186,9 @@ function closePanel() {
 window.addEventListener('keydown', (e) => {
   if (panel) {
     const keys = PANEL_KEYS[panel.name] || [];
-    // panel keys never reach the game's input (E would otherwise pick the document up again)
+    // panel keys never reach the game's input
     e.stopImmediatePropagation();
+    if (e.code === 'Tab') e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'Escape' || keys.includes(e.code)) {
       e.preventDefault();
@@ -158,18 +197,16 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'Escape' && game && !game.paused && params.has('autostart')) pauseGame();
-});
+}, true);
 
 $('#panel').addEventListener('click', (e) => {
-  // clicking the paper (or outside it) puts the document down
-  if (panel?.name === 'paper') closePanel();
-  else if (e.target === e.currentTarget && panel?.name === 'map') closePanel();
+  if (e.target === e.currentTarget && (panel?.name === 'map' || panel?.name === 'terminal')) closePanel();
 });
 
 // ---- buttons ------------------------------------------------------------------------------------
 
 document.addEventListener('pointerlockchange', () => {
-  if (!document.pointerLockElement && game && !game.paused && !params.has('autostart')) pauseGame();
+  if (!document.pointerLockElement && game && !game.paused && !panel && !params.has('autostart')) pauseGame();
 });
 
 $('#view').addEventListener('click', () => {
@@ -177,55 +214,42 @@ $('#view').addEventListener('click', () => {
 });
 
 $('#btn-new').addEventListener('click', () => {
-  if (save.data.player) {
+  if (save.data.run) {
     const b = $('#btn-new');
-    if (b.dataset.armed) {
-      save.newTape();
-      rewind();
-    } else {
+    if (!b.dataset.armed) {
       b.dataset.armed = '1';
-      b.textContent = 'Erase this tape?';
+      b.textContent = 'Abandon the current contract?';
+      return;
     }
-    return;
   }
-  game.audio.init();
-  enter();
+  newContract();
 });
-$('#btn-continue').addEventListener('click', () => {
-  game.audio.init();
-  enter();
-});
-$('#btn-discoveries').addEventListener('click', () => openPanel('discoveries', 'title'));
+$('#btn-continue').addEventListener('click', continueContract);
 $('#btn-options').addEventListener('click', () => openPanel('options', 'title'));
 $('#btn-resume').addEventListener('click', enter);
-$('#btn-pause-log').addEventListener('click', () => openPanel('log', 'pause'));
 $('#btn-pause-map').addEventListener('click', () => openPanel('map', 'pause'));
 $('#btn-pause-options').addEventListener('click', () => openPanel('options', 'pause'));
-$('#btn-quit').addEventListener('click', toTitle);
+$('#btn-quit').addEventListener('click', () => {
+  game.session = null;
+  toTitle();
+});
 
-// HUD clock and debug readout
+// HUD and debug readout
 setInterval(() => {
-  if (!game || !game.player) return;
-  ui.setStamp(game.time);
-  ui.setRec(Math.floor(performance.now() / 600) % 2 === 0);
-  ui.setPrompt(game.nearInteraction && !game.paused ? game.nearInteraction.it.prompt : '');
-  ui.setBattery(game.player.battery, game.player.flashlight);
+  if (!game || !game.session) return;
+  ui.update(game.hud());
   if (debug) {
     const c = game.currentCell;
     const p = game.player;
     ui.debug(
       `${game.fps.value.toFixed(0)} fps  worst ${(game.fps.lastWorst || 0).toFixed(1)} ms  ` +
         `cell ${c ? c.cx + ',' + c.cz + ' ' + c.kindId : '-'}  pos ${p.x.toFixed(1)},${p.z.toFixed(1)}  ` +
-        `cells ${game.world.cells.size}  calls ${game.renderer.info.render.calls}`,
+        `cells ${game.world.cells.size}  calls ${game.renderer.info.render.calls}  tris ${game.renderer.info.render.triangles}`,
     );
   }
 }, 100);
 
-window.addEventListener('beforeunload', () => {
-  if (!rewinding) game?.autosave();
-});
-
 boot().catch((err) => {
   console.error(err);
-  $('#loading').textContent = 'tape error: ' + err.message;
+  $('#loading').textContent = 'signal lost: ' + err.message;
 });

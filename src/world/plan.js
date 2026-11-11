@@ -5,23 +5,32 @@ import { N, TILE, DIRS, DOOR_HEIGHT, INNER_DOOR_HEIGHT } from './constants.js';
 import { doorTiles, doorInside } from './doors.js';
 
 export class Plan {
-  constructor({ seed, cx, cz, doors, kindId }) {
+  constructor({ seed, cx, cz, doors, kindId, siteId = null }) {
     this.seed = seed;
     this.cx = cx;
     this.cz = cz;
     this.doors = doors;
     this.kindId = kindId;
+    this.siteId = siteId;
     // zone 0 is "solid": no floor, no ceiling
     this.zones = [{ name: 'solid', ceil: 0 }];
     this.tiles = new Uint8Array(N * N);
     this.floorMat = new Array(N * N).fill(null);
     this.blocked = new Uint8Array(N * N);
+    // solid tiles whose faces the shell should not draw (a kind builds that mass itself)
+    this.noFace = new Uint8Array(N * N);
     this.props = [];
     this.lights = [];
     this.points = {};
     this.interactions = [];
-    this.ambient = [0.035, 0.04, 0.035];
+    this.lootSpots = []; // [{ x, z, y }]: where salvage can be lying tonight
+    this.ambient = [0.03, 0.032, 0.034];
     this.notes = [];
+  }
+
+  /** A spot where loot may be placed: on the floor (y = 0) or on a surface at height y. */
+  loot(x, z, y = 0) {
+    this.lootSpots.push({ x: +x.toFixed(3), z: +z.toFixed(3), y: +y.toFixed(3) });
   }
 
   idx(i, j) {
@@ -47,9 +56,14 @@ export class Plan {
     return this.floorMat[k] || this.zones[this.tiles[k]].floor;
   }
 
-  /** Add a zone: { name, ceil, floor, wall, ceilMat }. Returns its index. */
+  /**
+   * Add a zone: { name, ceil, floor, wall, ceilMat, sky, wallH, baseboard }. Returns its index.
+   * sky: open to the night (no ceiling; walls toward solid are wallH tall).
+   */
   zone(z) {
-    this.zones.push({ ceil: 2.8, floor: 'carpetGold', wall: 'wallpaperStripe', ceilMat: 'acoustic', ...z });
+    const zone = { ceil: 2.8, floor: 'sealedConcrete', wall: 'paintBlock', ceilMat: 'ceilTile', baseboard: true, ...z };
+    if (zone.sky) zone.ceil = 30;
+    this.zones.push(zone);
     return this.zones.length - 1;
   }
 
@@ -112,8 +126,8 @@ export class Plan {
   }
 
   /** A doorway through a wall: tiles become a low-ceilinged door zone. */
-  doorway(i0, j0, i1, j1, { wall = 'doorFrame', floor = 'threshold' } = {}) {
-    const z = this.zone({ name: 'doorway', ceil: INNER_DOOR_HEIGHT, floor, wall, ceilMat: wall, door: true });
+  doorway(i0, j0, i1, j1, { wall = 'doorFrame', floor = 'threshold', ceil = INNER_DOOR_HEIGHT } = {}) {
+    const z = this.zone({ name: 'doorway', ceil, floor, wall, ceilMat: wall, door: true });
     this.fill(i0, j0, i1, j1, z);
     return z;
   }
@@ -125,7 +139,7 @@ export class Plan {
       if (!door) continue;
       const z = this.zone({
         name: 'boundary-door',
-        ceil: DOOR_HEIGHT,
+        ceil: mats.ceil || DOOR_HEIGHT,
         floor: mats.floor || 'threshold',
         wall: mats.wall || 'doorFrame',
         ceilMat: mats.wall || 'doorFrame',
@@ -175,7 +189,7 @@ export class Plan {
    * light within `gap` metres (branch corridors carved by connectDoors, mostly). Deterministic
    * scan order; flicker comes from the caller's rng.
    */
-  fillDarkGaps(zones, { gap = 4, power = 0.7, rng = null, flickerChance = 0.2, extra = [] } = {}) {
+  fillDarkGaps(zones, { gap = 4, power = 0.7, rng = null, flickerChance = 0.2, extra = [], style = 'troffer', drop = 0 } = {}) {
     const set = new Set(zones);
     // `extra`: [x, z] of lights that props add (chandeliers, lamps), which plan.lights does not see
     const known = [...this.lights.map((l) => [l.x, l.z]), ...extra];
@@ -199,16 +213,29 @@ export class Plan {
         const alongX = wide(1, 0) + wide(-1, 0) >= wide(0, 1) + wide(0, -1);
         const cx = alongX ? x : x + Math.max(-0.5, Math.min(0.5, ox));
         const cz = alongX ? z + Math.max(-0.5, Math.min(0.5, oz)) : z;
-        this.troffer(cx, cz, { power, flicker: rng ? rng.chance(flickerChance) : false, rot: alongX ? 0 : Math.PI / 2 });
+        this.troffer(cx, cz, { power, flicker: rng ? rng.chance(flickerChance) : false, rot: alongX ? 0 : Math.PI / 2, style, drop });
         known.push([cx, cz]);
       }
   }
 
-  troffer(x, z, { flicker = false, power = 1, color = [0.86, 1.0, 0.84], rot = 0 } = {}) {
+  troffer(x, z, { flicker = false, power = 1, color = [0.86, 1.0, 0.84], rot = 0, style = 'troffer', drop = 0, range = 9, dead = false } = {}) {
     const i = Math.floor(x / TILE);
     const j = Math.floor(z / TILE);
     const ceil = this.ceilAt(i, j);
-    this.lights.push({ type: 'troffer', x, y: ceil - 0.03, z, color, power: 2.6 * power, range: 9, flicker, rot, fixture: true });
+    const y = ceil - 0.03 - drop;
+    // battens throw light sideways as well as down; high-bays are tighter than troffers
+    const lobe = style === 'batten' ? 0.7 : style === 'highbay' ? 1.8 : 1.3;
+    this.lights.push({ type: 'troffer', style, x, y, z, ceil, color, power: dead ? 0 : 2.6 * power, range, flicker, rot, fixture: true, lobe });
+  }
+
+  /** A bare tube batten hung below the ceiling (warehouses, plant rooms, corridors). */
+  batten(x, z, opts = {}) {
+    this.troffer(x, z, { style: 'batten', drop: 0.35, ...opts });
+  }
+
+  /** An industrial high-bay dome on a drop rod, for tall spaces. */
+  highbay(x, z, opts = {}) {
+    this.troffer(x, z, { style: 'highbay', drop: 1.4, range: 13, color: [0.95, 1.0, 0.9], ...opts });
   }
 
   /** A generic light. type: 'point' (omni) or 'troffer' (down-facing). fixture: draw geometry. */

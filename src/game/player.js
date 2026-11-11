@@ -20,9 +20,7 @@ export function createPlayer(x, z, yaw = 0) {
     stamina: 1,
     bob: 0,
     speed: 0,
-    flashlight: false,
-    battery: 1,
-    lastStep: 0,
+    still: 0,
   };
 }
 
@@ -33,18 +31,25 @@ export function applyLook(p, look) {
 
 const _boxes = [];
 
-/** One tick. Returns events (footsteps) for audio. */
-export function stepPlayer(p, a, world, dt, events) {
+/** How much a load slows you: 1 unladen, down to 0.45. */
+export const loadFactor = (kg) => Math.max(0.45, Math.min(1, 1 - kg / 60));
+export const RUN_LIMIT_KG = 25;
+
+/**
+ * One tick. Pushes events (footsteps, with how loud they were) for audio and for anything that
+ * listens. kg is what the player is carrying.
+ */
+export function stepPlayer(p, a, world, dt, events, kg = 0) {
   // crouch / run
   const wantCrouch = a.crouch ? 1 : 0;
   p.crouch += (wantCrouch - p.crouch) * Math.min(1, dt * 9);
   let len = Math.hypot(a.moveX, a.moveZ);
   const mx = len ? a.moveX / len : 0;
   const mz = len ? a.moveZ / len : 0;
-  const running = a.run && len > 0 && p.crouch < 0.5 && p.stamina > 0.02;
-  if (running) p.stamina = Math.max(0, p.stamina - dt / 9);
+  const running = a.run && len > 0 && p.crouch < 0.5 && p.stamina > 0.02 && kg <= RUN_LIMIT_KG;
+  if (running) p.stamina = Math.max(0, p.stamina - (dt / 9) * (1 + kg / 30));
   else p.stamina = Math.min(1, p.stamina + dt / 6);
-  const top = p.crouch > 0.5 ? CROUCH : running ? RUN : WALK;
+  const top = (p.crouch > 0.5 ? CROUCH : running ? RUN : WALK) * loadFactor(kg);
   // camera-relative direction: forward is -z rotated by yaw
   const sy = Math.sin(p.yaw);
   const cy = Math.cos(p.yaw);
@@ -68,17 +73,14 @@ export function stepPlayer(p, a, world, dt, events) {
   const before = Math.floor(p.bob / Math.PI);
   p.bob += (moved / stride) * Math.PI;
   if (Math.floor(p.bob / Math.PI) !== before && moved > 0.001) {
-    events.push({ type: 'step', x: p.x, z: p.z, run: running, crouch: p.crouch > 0.5 });
+    const crouch = p.crouch > 0.5;
+    // loudness 0..1: what a listener in the building could pick up
+    const loud = crouch ? 0.15 : running ? 0.85 : 0.4 + Math.min(0.3, kg / 80);
+    events.push({ type: 'step', x: p.x, z: p.z, run: running, crouch, loud, heavy: kg > 15 });
   }
   if (moved < 0.0005) p.bob += (Math.round(p.bob / Math.PI) * Math.PI - p.bob) * Math.min(1, dt * 4);
   p.eye = EYE + (EYE_CROUCH - EYE) * p.crouch;
-
-  if (a.flashlight) {
-    p.flashlight = !p.flashlight;
-    events.push({ type: 'flashlight', on: p.flashlight });
-  }
-  if (p.flashlight) p.battery = Math.max(0, p.battery - dt / 900);
-  else p.battery = Math.min(1, p.battery + dt / 1800);
+  p.still = moved < 0.0005 ? (p.still || 0) + dt : 0;
 }
 
 function move(p, world, dx, dz) {

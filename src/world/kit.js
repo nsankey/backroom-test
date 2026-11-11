@@ -75,32 +75,30 @@ export function vestibule(plan, dir, depth = 3, half = 1.75) {
       if (i >= 1 && j >= 1 && i <= N - 2 && j <= N - 2 && plan.tiles[plan.idx(i, j)] === 0) plan.tiles[plan.idx(i, j)] = zone;
 }
 
-function clearAround(plan, x, z, r) {
+/** Is every tile within r metres of (x, z) open floor (no doorway)? */
+export function clearAround(plan, x, z, r) {
   for (let j = Math.floor((z - r) / TILE); j <= Math.floor((z + r) / TILE); j++)
     for (let i = Math.floor((x - r) / TILE); i <= Math.floor((x + r) / TILE); i++) {
-      if (!plan.isFloor(i, j) || plan.zoneAt(i, j).door) return false;
+      if (!plan.isFloor(i, j) || plan.zoneAt(i, j).door || plan.blocked[plan.idx(i, j)]) return false;
     }
   return true;
 }
 
-/** Place the lore document just inside the first door, nudged off the walking line. */
-export function placeLore(plan, { depth = 1.6, lateral = 1.1, onSurface = null } = {}) {
-  const d = firstDoor(plan);
-  if (!d) return;
-  if (!onSurface) vestibule(plan, d);
-  let p = null;
-  for (const dep of [depth, depth + 0.8, depth + 1.6])
-    for (const lat of [lateral, -lateral]) {
-      if (p) break;
-      const c = insideDoor(d, plan.doors[d], dep, lat);
-      if (onSurface || clearAround(plan, c.x, c.z, 0.45)) p = c;
-    }
-  if (!p) p = insideDoor(d, plan.doors[d], depth, lateral);
-  if (onSurface) {
-    plan.prop('loreDoc', p.x, p.z, p.rot, { onSurface: true, y: onSurface });
-  } else plan.prop('loreDoc', p.x, p.z, p.rot);
-  plan.point('lore', p.x, p.z, { y: (onSurface || 0.74) + 0.02, dir: d });
-  plan.interactions.push({ type: 'readLore', x: p.x, y: (onSurface || 0.74) + 0.05, z: p.z, radius: 1.6, prompt: 'Read' });
+/** Points just inside each boundary door (metres), for keeping door approaches clear. */
+export function doorApproaches(plan, depth = 1.2) {
+  const out = [];
+  for (const d of DIRS) if (plan.doors[d]) out.push(insideDoor(d, plan.doors[d], depth));
+  return out;
+}
+
+/** True if a rect (metres) stays at least `margin` away from every door approach. */
+export function clearOfDoors(plan, x0, z0, x1, z1, margin = 1.8) {
+  for (const a of doorApproaches(plan, 0.8)) {
+    const ex = Math.max(x0 - a.x, 0, a.x - x1);
+    const ez = Math.max(z0 - a.z, 0, a.z - z1);
+    if (Math.hypot(ex, ez) < margin) return false;
+  }
+  return true;
 }
 
 /** Pick a corridor axis that suits the doors: 'x' (east-west) or 'z' (north-south). */

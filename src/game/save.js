@@ -1,37 +1,23 @@
-// Saves live in localStorage. Export/import codes are the same JSON, base64-encoded.
-// Thumbnails (small JPEGs captured from the game the first time something is discovered) are
-// kept under a separate key and are not part of the export code, which stays short enough to paste.
+// Saves live in localStorage. A contract is checkpointed in the van before each night (a night
+// abandoned halfway is a night not worked). Export/import codes are the same JSON, deflated and
+// base64-encoded.
 
-const KEY = 'meridian.save.v1';
-const THUMBS = 'meridian.thumbs.v1';
+const KEY = 'nightreceivers.save.v1';
 const VERSION = 1;
+const PREFIX = 'NR1-';
 
-function fresh(seed) {
+function fresh() {
   return {
     v: VERSION,
-    worldSeed: seed,
-    // this tape (reset by "new tape")
-    player: null, // { x, z, yaw, flashlight, battery }
-    visited: {}, // "cx,cz" -> kindId
-    maps: {}, // "cx,cz" -> base64 floor/blocked bitmask for the map
-    meetings: {}, // cell keys where a resident has already been met
-    checkouts: 0,
-    tapeSeconds: 0,
-    // kept across tapes
-    discovered: {}, // "place:<kind>" | "entity:<id>" | "lore:<kind>" -> { at: playSeconds, count }
-    log: [], // [{ key, text, kind }]
-    lore: {}, // kindId -> true once read
-    playSeconds: 0,
+    run: null, // the contract in progress, as it stood at the last brief
+    records: { nights: 0, paid: 0, banked: 0, contracts: 0 }, // best across contracts
     settings: { sensitivity: 1, volume: 0.9 },
   };
 }
 
-const TAPE_FIELDS = ['player', 'visited', 'maps', 'meetings', 'checkouts', 'tapeSeconds'];
-
 export class Save {
   constructor() {
-    this.data = this.load() || fresh(this.newSeed());
-    this.thumbs = this.loadThumbs();
+    this.data = this.load() || fresh();
   }
 
   newSeed() {
@@ -47,7 +33,7 @@ export class Save {
       if (!raw) return null;
       const d = JSON.parse(raw);
       if (!d || d.v !== VERSION) return null;
-      return { ...fresh(d.worldSeed), ...d };
+      return { ...fresh(), ...d };
     } catch {
       return null;
     }
@@ -62,78 +48,46 @@ export class Save {
     }
   }
 
-  /** Start a new tape: a new world, but discoveries, the logbook and settings carry over. */
-  newTape(seed = this.newSeed()) {
-    const keep = this.data;
-    this.data = fresh(seed);
-    for (const k of Object.keys(keep)) if (!TAPE_FIELDS.includes(k) && k !== 'worldSeed') this.data[k] = keep[k];
+  /** Store the contract as it stands (called in the van, before a night). */
+  checkpoint(run) {
+    this.data.run = JSON.parse(JSON.stringify(run));
     this.write();
   }
 
-  /** Forget everything except settings. */
-  reset(seed = this.newSeed()) {
+  /** The contract has ended: keep the records, forget the run. */
+  endContract(run) {
+    const r = this.data.records;
+    r.nights = Math.max(r.nights, run.history.length);
+    r.paid = Math.max(r.paid, run.paid);
+    r.banked = Math.max(r.banked, run.banked);
+    r.contracts++;
+    this.data.run = null;
+    this.write();
+  }
+
+  reset() {
     const settings = this.data.settings;
-    this.data = fresh(seed);
+    this.data = fresh();
     this.data.settings = settings;
-    this.thumbs = {};
-    this.writeThumbs();
     this.write();
   }
 
-  isDiscovered(key) {
-    return !!this.data.discovered[key];
-  }
-
-  /** Record a discovery; returns true the first time. */
-  markDiscovered(key) {
-    const d = this.data.discovered;
-    if (d[key]) {
-      d[key].count++;
-      return false;
-    }
-    d[key] = { at: Math.round(this.data.playSeconds), count: 1 };
-    this.write();
-    return true;
-  }
-
-  loadThumbs() {
-    try {
-      return JSON.parse(localStorage.getItem(THUMBS) || '{}') || {};
-    } catch {
-      return {};
-    }
-  }
-
-  writeThumbs() {
-    try {
-      localStorage.setItem(THUMBS, JSON.stringify(this.thumbs));
-    } catch {
-      /* storage full: thumbnails are optional */
-    }
-  }
-
-  setThumb(key, dataUrl) {
-    this.thumbs[key] = dataUrl;
-    this.writeThumbs();
-  }
-
-  /** ML2- codes are deflated JSON in base64 (ML1- is plain JSON, still accepted). */
   async exportCode() {
     const bytes = new TextEncoder().encode(JSON.stringify(this.data));
-    if (typeof CompressionStream === 'undefined') return 'ML1-' + toB64(bytes);
-    const packed = await pipe(bytes, new CompressionStream('deflate-raw'));
-    return 'ML2-' + toB64(packed);
+    const packed = typeof CompressionStream === 'undefined' ? bytes : await pipe(bytes, new CompressionStream('deflate-raw'));
+    return (typeof CompressionStream === 'undefined' ? 'NR0-' : PREFIX) + toB64(packed);
   }
 
   async importCode(code) {
     try {
       const clean = code.trim().replace(/\s+/g, '');
       let bytes;
-      if (clean.startsWith('ML2-')) bytes = await pipe(fromB64(clean.slice(4)), new DecompressionStream('deflate-raw'));
-      else bytes = fromB64(clean.replace(/^ML1-/, ''));
+      if (clean.startsWith(PREFIX)) bytes = await pipe(fromB64(clean.slice(PREFIX.length)), new DecompressionStream('deflate-raw'));
+      else if (clean.startsWith('NR0-')) bytes = fromB64(clean.slice(4));
+      else return false;
       const d = JSON.parse(new TextDecoder().decode(bytes));
-      if (!d || d.v !== VERSION || typeof d.worldSeed !== 'number') return false;
-      this.data = { ...fresh(d.worldSeed), ...d };
+      if (!d || d.v !== VERSION) return false;
+      this.data = { ...fresh(), ...d };
       this.write();
       return true;
     } catch {
@@ -155,29 +109,4 @@ function fromB64(s) {
 async function pipe(bytes, stream) {
   const out = new Response(new Blob([bytes]).stream().pipeThrough(stream));
   return new Uint8Array(await out.arrayBuffer());
-}
-
-/** Pack a cell's floor and blocked tiles into a base64 string for the map (2 x 128 bytes). */
-export function packCellMask(cell, n) {
-  const bytes = new Uint8Array((n * n) / 4);
-  const half = (n * n) / 8;
-  for (let k = 0; k < n * n; k++) {
-    if (cell.tiles[k] !== 0) bytes[k >> 3] |= 1 << (k & 7);
-    if (cell.blocked[k] === 1) bytes[half + (k >> 3)] |= 1 << (k & 7);
-  }
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
-}
-
-export function unpackCellMask(str, n) {
-  const bin = atob(str);
-  const half = (n * n) / 8;
-  const floor = new Uint8Array(n * n);
-  const blocked = new Uint8Array(n * n);
-  for (let k = 0; k < n * n; k++) {
-    floor[k] = (bin.charCodeAt(k >> 3) >> (k & 7)) & 1;
-    blocked[k] = (bin.charCodeAt(half + (k >> 3)) >> (k & 7)) & 1;
-  }
-  return { floor, blocked };
 }

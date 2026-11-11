@@ -1,146 +1,148 @@
-// Full-screen panels: the floor plan, the logbook, the discoveries screen, options and paper
-// documents. Plain DOM, rendered into #panel from save data (no game state is changed here).
+// Full-screen paperwork, all on Grisholm's amber terminal: the van terminal (writs, ledger), the
+// site plan, the night's manifest, the termination notice and options. Plain DOM. Panels never
+// change game state themselves: they call back with intents.
 
-import { KIND_LIST, KINDS } from '../world/kinds/index.js';
-import { ENTITY_LIST } from '../entities/index.js';
+import { SITE_LIST, SITES } from '../world/site.js';
+import { KINDS } from '../world/kinds/index.js';
 import { CELL, N } from '../world/constants.js';
-import { unpackCellMask } from '../game/save.js';
+import { ITEMS, fmtH } from '../game/items.js';
+import { fmtClock } from '../game/clock.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const HAZARD = ['', 'LOW', 'MODERATE', 'HIGH'];
 
-function head(title, sub) {
-  return `<div class="panel-head"><div><div class="eyebrow">${esc(sub)}</div><h2>${esc(title)}</h2></div><button data-close>Close</button></div>`;
+function head(title, sub, close = true) {
+  return `<div class="foot" style="margin:0"><div><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div></div>${close ? '<button data-close>Close [Esc]</button>' : ''}</div>`;
 }
 
-function fmtTime(s) {
-  const m = Math.floor(s / 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+// ---- the van terminal -------------------------------------------------------------------------
+
+export function terminalPanel(el, game, { onIntent, tab = null }) {
+  const s = game.session.state;
+  const run = s.run;
+  const brief = s.phase === 'brief';
+  tab = tab || (brief ? 'writs' : 'ledger');
+  const tabs = (brief ? ['writs', 'ledger'] : ['ledger', 'site']).map((t) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${t.toUpperCase()}</button>`).join('');
+  let body = '';
+  if (tab === 'writs') {
+    body =
+      `<p class="muted">Tonight's writs. Choose one, then pull the governor by the door to drive out. The door unlocks at 21:00 and the Strongbox leaves at 04:00, with or without you.</p>` +
+      SITE_LIST.map((site) => {
+        const n = (run.visits[site.id] || 0) + 1;
+        return `<div class="writ${site.id === run.siteId ? ' on' : ''}" data-writ="${site.id}">
+          <div class="h"><span>${esc(site.writ)} &middot; ${esc(site.name.toUpperCase())}</span><span>HAZARD ${HAZARD[site.hazard]}</span></div>
+          <div class="b">${esc(site.place)}. ${esc(site.blurb)} Visit ${n}. ${site.cells[0]}-${site.cells[1]} bays.</div></div>`;
+      }).join('');
+  } else if (tab === 'ledger') {
+    const left = run.instalment.due - run.night + 1;
+    const rows = run.history
+      .slice(-8)
+      .map((h) => `<tr><td>NIGHT ${h.night}</td><td>${esc(SITES[h.siteId].name)}</td><td class="v">${fmtH(h.banked)}</td><td class="v">${h.fees ? '-' + fmtH(h.fees) : ''}</td></tr>`)
+      .join('');
+    const tonight = s.phase === 'night' ? `<p>Banked tonight: <b>${fmtH(s.tonight.banked)}</b> (${s.tonight.items.length} items)</p>` : '';
+    body = `<div class="foot" style="margin:0 0 12px"><div><div class="muted">LEDGER</div><div class="big">${fmtH(run.ledger)}</div></div>
+      <div><div class="muted">INSTALMENT ${run.instalment.n}</div><div class="big">${fmtH(run.instalment.target)}</div><div class="muted">due end of night ${run.instalment.due} &middot; ${left <= 1 ? 'TONIGHT' : left + ' nights left'}</div></div>
+      <div><div class="muted">STILL OWED</div><div class="big ${run.ledger >= run.instalment.target ? 'good' : ''}">${fmtH(Math.max(0, run.instalment.target - run.ledger))}</div></div></div>
+      ${tonight}
+      <table><tr><th>NIGHT</th><th>WRIT</th><th class="v">BANKED</th><th class="v">FEES</th></tr>${rows || '<tr><td colspan="4" class="muted">No nights worked yet.</td></tr>'}</table>
+      <p class="muted">Salvage is valued by the strongroom when it goes down the night safe. Anything still aboard at departure is banked automatically. Overtime after 03:00 is charged at ħ5 per ten minutes.</p>`;
+  } else if (tab === 'site') {
+    const site = SITES[s.site.siteId];
+    const left = s.items.filter((i) => !i.holder).length;
+    body = `<p>${esc(site.writ)} &middot; ${esc(site.name)}, ${esc(site.place)}</p><p class="muted">${esc(site.blurb)}</p>
+      <p>Time now ${fmtClock(game.minutes)}. Facility power ${Math.round(game.world.cells.get('0,-1')?.uniforms.uDim.value * 100 || 100)}% and falling.</p>
+      <p class="muted">${left} items of salvage still in the building, by the inventory.</p>`;
+  }
+  el.innerHTML = `<div class="term">${head('GRISHOLM & DAUGHTERS · FIELD TERMINAL', `STRONGBOX ${game.hud().crew} · NIGHT ${run.night}`)}<div class="tabs">${tabs}</div>${body}</div>`;
+  for (const b of el.querySelectorAll('[data-tab]')) b.addEventListener('click', () => terminalPanel(el, game, { onIntent, tab: b.dataset.tab }));
+  for (const w of el.querySelectorAll('[data-writ]'))
+    w.addEventListener('click', () => {
+      onIntent({ type: 'writ', siteId: w.dataset.writ });
+      terminalPanel(el, game, { onIntent, tab: 'writs' });
+    });
 }
 
-// ---- map --------------------------------------------------------------------------------------
+// ---- site plan --------------------------------------------------------------------------------
 
-export function mapPanel(el, save, game) {
-  const visited = save.data.visited;
-  const keys = Object.keys(visited);
-  el.innerHTML = `<div class="panel-inner">${head('FLOOR PLAN', `${keys.length} place${keys.length === 1 ? '' : 's'} surveyed · drawn as walked`)}
+export function mapPanel(el, game) {
+  const d = game.planData();
+  const site = game.session.state.site ? SITES[game.session.state.site.siteId] : null;
+  el.innerHTML = `<div class="term">${head('SITE PLAN', site ? `${site.writ} · ${site.name.toUpperCase()} · ${d.cells.length - 1} bays walked` : 'THE YARD')}
     <canvas id="mapcanvas"></canvas>
-    <p class="map-note">You are the red mark. Places you have not walked are not on the plan, because they were not there yet.</p></div>`;
+    <p class="muted">Drawn from your helmet camera as you walk. You are the arrow. The Strongbox is marked in the yard.</p></div>`;
   const cv = el.querySelector('#mapcanvas');
-  requestAnimationFrame(() => drawMap(cv, save, game));
+  requestAnimationFrame(() => drawMap(cv, d));
 }
 
-function drawMap(cv, save, game) {
-  const visited = save.data.visited;
-  const keys = Object.keys(visited);
+function drawMap(cv, { cells, player }) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const cssW = cv.clientWidth || 800;
-  const cssH = Math.min(window.innerHeight * 0.68, cssW * 0.66);
+  const cssH = Math.min(window.innerHeight * 0.62, cssW * 0.7);
   cv.style.height = cssH + 'px';
   cv.width = Math.round(cssW * dpr);
   cv.height = Math.round(cssH * dpr);
   const g = cv.getContext('2d');
-  g.fillStyle = '#0f2236';
+  g.fillStyle = '#0d0a05';
   g.fillRect(0, 0, cv.width, cv.height);
-  // faint drafting grid
-  g.strokeStyle = 'rgba(160, 200, 255, 0.06)';
-  g.lineWidth = 1;
-  for (let x = 0; x < cv.width; x += 12 * dpr) {
-    g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, cv.height);
-    g.stroke();
-  }
-  for (let y = 0; y < cv.height; y += 12 * dpr) {
-    g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(cv.width, y);
-    g.stroke();
-  }
-  if (!keys.length) return;
-
-  const p = game?.player;
-  const cells = keys.map((k) => {
-    const [cx, cz] = k.split(',').map(Number);
-    return { k, cx, cz };
-  });
-  let minX = Math.min(...cells.map((c) => c.cx));
-  let maxX = Math.max(...cells.map((c) => c.cx));
-  let minZ = Math.min(...cells.map((c) => c.cz));
-  let maxZ = Math.max(...cells.map((c) => c.cz));
-  // keep the player's cell centred when the plan is small, fit it when it is large
-  const pad = 0.6;
-  const spanX = maxX - minX + 1 + pad * 2;
-  const spanZ = maxZ - minZ + 1 + pad * 2;
-  const cellPx = Math.min(cv.width / spanX, cv.height / spanZ, 200 * dpr);
-  const tilePx = cellPx / N;
+  if (!cells.length) return;
+  const minX = Math.min(...cells.map((c) => c.cx));
+  const maxX = Math.max(...cells.map((c) => c.cx));
+  const minZ = Math.min(...cells.map((c) => c.cz));
+  const maxZ = Math.max(...cells.map((c) => c.cz));
+  const pad = 0.4;
+  const cellPx = Math.min(cv.width / (maxX - minX + 1 + pad * 2), cv.height / (maxZ - minZ + 1 + pad * 2), 220 * dpr);
+  const tp = cellPx / N;
   const ox = (cv.width - (maxX - minX + 1) * cellPx) / 2 - minX * cellPx;
   const oz = (cv.height - (maxZ - minZ + 1) * cellPx) / 2 - minZ * cellPx;
-
+  const have = new Map(cells.map((c) => [c.key, c]));
+  const floorAt = (c, i, j) => {
+    if (i < 0 || j < 0 || i >= N || j >= N) {
+      const ncx = c.cx + (i < 0 ? -1 : i >= N ? 1 : 0);
+      const ncz = c.cz + (j < 0 ? -1 : j >= N ? 1 : 0);
+      const nc = have.get(`${ncx},${ncz}`);
+      if (!nc) return true; // unwalked: draw as open
+      return nc.tiles[((j + N) % N) * N + ((i + N) % N)] !== 0;
+    }
+    return c.tiles[j * N + i] !== 0;
+  };
   for (const c of cells) {
-    const mask = save.data.maps[c.k];
     const x0 = ox + c.cx * cellPx;
     const z0 = oz + c.cz * cellPx;
-    if (!mask) {
-      g.strokeStyle = 'rgba(200, 225, 255, 0.4)';
-      g.strokeRect(x0 + 2, z0 + 2, cellPx - 4, cellPx - 4);
-      continue;
-    }
-    const { floor, blocked } = unpackCellMask(mask, N);
-    g.fillStyle = 'rgba(190, 215, 255, 0.13)';
-    for (let j = 0; j < N; j++)
-      for (let i = 0; i < N; i++) if (floor[j * N + i]) g.fillRect(x0 + i * tilePx, z0 + j * tilePx, tilePx + 0.5, tilePx + 0.5);
-    // furniture as small hatched blocks
-    g.fillStyle = 'rgba(190, 215, 255, 0.22)';
-    for (let j = 0; j < N; j++)
-      for (let i = 0; i < N; i++)
-        if (floor[j * N + i] && blocked[j * N + i]) g.fillRect(x0 + i * tilePx + tilePx * 0.2, z0 + j * tilePx + tilePx * 0.2, tilePx * 0.6, tilePx * 0.6);
-    // walls: edges between floor and solid, drawn in ink
-    g.strokeStyle = 'rgba(215, 232, 255, 0.85)';
-    g.lineWidth = Math.max(1, tilePx * 0.22);
+    g.fillStyle = 'rgba(255, 182, 72, 0.09)';
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (c.tiles[j * N + i]) g.fillRect(x0 + i * tp, z0 + j * tp, tp + 0.5, tp + 0.5);
+    g.fillStyle = 'rgba(255, 182, 72, 0.22)';
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (c.tiles[j * N + i] && c.blocked[j * N + i]) g.fillRect(x0 + i * tp + tp * 0.2, z0 + j * tp + tp * 0.2, tp * 0.6, tp * 0.6);
+    g.strokeStyle = 'rgba(255, 190, 90, 0.9)';
+    g.lineWidth = Math.max(1, tp * 0.22);
     g.beginPath();
-    const isF = (i, j) => i >= 0 && j >= 0 && i < N && j < N && floor[j * N + i] === 1;
     for (let j = 0; j < N; j++)
       for (let i = 0; i < N; i++) {
-        if (!isF(i, j)) continue;
-        const x = x0 + i * tilePx;
-        const z = z0 + j * tilePx;
-        // boundary tiles open into the neighbour only where the neighbour's edge is floor too
-        if (!isF(i - 1, j) && !(i === 0 && openAcross(save, c.cx - 1, c.cz, N - 1, j))) {
-          g.moveTo(x, z);
-          g.lineTo(x, z + tilePx);
-        }
-        if (!isF(i + 1, j) && !(i === N - 1 && openAcross(save, c.cx + 1, c.cz, 0, j))) {
-          g.moveTo(x + tilePx, z);
-          g.lineTo(x + tilePx, z + tilePx);
-        }
-        if (!isF(i, j - 1) && !(j === 0 && openAcross(save, c.cx, c.cz - 1, i, N - 1))) {
-          g.moveTo(x, z);
-          g.lineTo(x + tilePx, z);
-        }
-        if (!isF(i, j + 1) && !(j === N - 1 && openAcross(save, c.cx, c.cz + 1, i, 0))) {
-          g.moveTo(x, z + tilePx);
-          g.lineTo(x + tilePx, z + tilePx);
-        }
+        if (!c.tiles[j * N + i]) continue;
+        const x = x0 + i * tp;
+        const z = z0 + j * tp;
+        if (!floorAt(c, i - 1, j)) g.moveTo(x, z), g.lineTo(x, z + tp);
+        if (!floorAt(c, i + 1, j)) g.moveTo(x + tp, z), g.lineTo(x + tp, z + tp);
+        if (!floorAt(c, i, j - 1)) g.moveTo(x, z), g.lineTo(x + tp, z);
+        if (!floorAt(c, i, j + 1)) g.moveTo(x, z + tp), g.lineTo(x + tp, z + tp);
       }
     g.stroke();
-    // label
     if (cellPx > 70 * dpr) {
-      const kind = KINDS[save.data.visited[c.k]];
-      g.fillStyle = 'rgba(225, 238, 255, 0.75)';
-      g.font = `${Math.round(Math.min(13, cellPx / 11) * dpr)}px Consolas, monospace`;
+      g.fillStyle = 'rgba(255, 190, 90, 0.75)';
+      g.font = `${Math.round(Math.min(12, cellPx / 12) * dpr)}px Consolas, monospace`;
       g.textAlign = 'center';
-      g.fillText((kind?.card?.title || kind?.name || '?').toUpperCase(), x0 + cellPx / 2, z0 + cellPx - 6 * dpr);
+      g.fillText((KINDS[c.kindId]?.name || '?').toUpperCase(), x0 + cellPx / 2, z0 + cellPx - 6 * dpr);
     }
   }
-
-  // the player
-  if (p) {
-    const px = ox + (p.x / CELL) * cellPx;
-    const pz = oz + (p.z / CELL) * cellPx;
-    const fx = -Math.sin(p.yaw);
-    const fz = -Math.cos(p.yaw);
-    const r = Math.max(5 * dpr, tilePx * 1.4);
-    g.fillStyle = '#ff4a3a';
+  // the van
+  g.fillStyle = 'rgba(93, 255, 138, 0.8)';
+  g.fillRect(ox + (9.5 / CELL) * cellPx, oz + (8 / CELL) * cellPx, (2 / CELL) * cellPx, (4.5 / CELL) * cellPx);
+  if (player) {
+    const px = ox + (player.x / CELL) * cellPx;
+    const pz = oz + (player.z / CELL) * cellPx;
+    const fx = -Math.sin(player.yaw);
+    const fz = -Math.cos(player.yaw);
+    const r = Math.max(5 * dpr, tp * 1.4);
+    g.fillStyle = '#ff4a36';
     g.beginPath();
     g.moveTo(px + fx * r * 1.6, pz + fz * r * 1.6);
     g.lineTo(px - fz * r * 0.8 - fx * r * 0.6, pz + fx * r * 0.8 - fz * r * 0.6);
@@ -150,65 +152,67 @@ function drawMap(cv, save, game) {
   }
 }
 
-/** Is tile (i, j) of a neighbouring cell surveyed floor? (Unsurveyed neighbours draw as open.) */
-function openAcross(save, cx, cz, i, j) {
-  const mask = save.data.maps[`${cx},${cz}`];
-  if (!mask) return true;
-  const k = j * N + i;
-  return ((atob(mask).charCodeAt(k >> 3) >> (k & 7)) & 1) === 1;
+// ---- the night's manifest ---------------------------------------------------------------------
+
+export function reportPanel(el, report, run, { onContinue }) {
+  const site = SITES[report.siteId];
+  const items = report.items
+    .slice()
+    .sort((a, b) => b.value - a.value)
+    .map((i) => `<tr><td>${esc(ITEMS[i.type].name)}${i.dropped ? ' <span class="muted">(damaged)</span>' : ''}</td><td class="v">${fmtH(i.value)}</td></tr>`)
+    .join('');
+  const fees = report.fees.map((f) => `<tr><td>${esc(f.what)}</td><td class="v bad">-${fmtH(f.v)}</td></tr>`).join('');
+  const lost = report.lost.length ? `<tr><td class="bad">Lost with the crew left behind: ${report.lost.map((l) => esc(ITEMS[l.type].name)).join(', ')}</td><td></td></tr>` : '';
+  const how =
+    report.reason === 'lever'
+      ? `Departed ${fmtClock(report.departed)} on the governor.`
+      : `The governor departed at 04:00${report.leftBehind.length ? ', without everyone' : ''}.`;
+  let inst = '';
+  if (report.paid) inst = `<p><span class="stamp good">INSTALMENT PAID</span> &nbsp; ${fmtH(report.target)} taken. The next Instalment is ${fmtH(report.nextTarget)}, due in three nights.</p>`;
+  else if (report.missed) inst = `<p><span class="stamp bad">INSTALMENT MISSED</span> &nbsp; ${fmtH(report.target)} was due.</p>`;
+  else inst = `<p class="muted">Instalment ${fmtH(run.instalment.target)} due at the end of night ${run.instalment.due}. Still owed: ${fmtH(Math.max(0, run.instalment.target - run.ledger))}.</p>`;
+  const behind = report.leftBehind.length ? `<p class="bad">You were not aboard at 04:00. A recovery crew collected you at first light. Everything you carried is gone, and you are stood down for night ${report.skipped}.</p>` : '';
+  el.innerHTML = `<div class="term">${head(`NIGHT ${report.night} · MANIFEST`, `${site.writ} · ${site.name.toUpperCase()} · ${site.place.toUpperCase()}`, false)}
+    <p>${how}</p>${behind}
+    <table><tr><th>BANKED</th><th class="v">${report.items.length} ITEMS</th></tr>${items || '<tr><td class="muted">Nothing banked tonight.</td><td></td></tr>'}
+    <tr><td><b>Total</b></td><td class="v"><b>${fmtH(report.banked)}</b></td></tr>${fees}${lost}</table>
+    <div class="foot"><div><div class="muted">LEDGER</div><div class="big">${fmtH(report.ledger)}</div></div><button data-continue>${run.over ? 'Read the notice' : 'Back to the van'}</button></div>
+    ${inst}</div>`;
+  el.querySelector('[data-continue]').addEventListener('click', onContinue);
 }
 
-// ---- logbook ----------------------------------------------------------------------------------
+// ---- the end of a contract ----------------------------------------------------------------------
 
-export function logPanel(el, save) {
-  const log = [...save.data.log].reverse();
-  const rows = log.length
-    ? log
-        .map((e) => {
-          const lore = e.key.startsWith('lore:');
-          const where = e.key.startsWith('place:') ? 'NEW PLACE' : (lore ? 'DOCUMENT · ' : '') + (KINDS[e.kind]?.card?.title || '');
-          const again = lore ? ` <button class="mini" data-read="${esc(e.key.slice(5))}">read again</button>` : '';
-          return `<div class="log-entry"><div class="where">${esc(where.toUpperCase())}</div>${esc(e.text)}${again}</div>`;
-        })
-        .join('')
-    : '<p class="empty">Nothing yet. Walk. Look. Read what was left on the desks.</p>';
-  el.innerHTML = `<div class="panel-inner">${head('LOGBOOK', `${log.length} entr${log.length === 1 ? 'y' : 'ies'} · tape time ${fmtTime(save.data.tapeSeconds || 0)}`)}<div class="log">${rows}</div></div>`;
+export function overPanel(el, run, { onNew, onTitle }) {
+  const best = run.best ? `${ITEMS[run.best.type].name}, ${fmtH(run.best.value)}` : 'nothing of note';
+  const why = run.over?.reason === 'debt' ? 'Your ledger went into the red.' : `The Instalment of ${fmtH(run.instalment.target)} fell due and was not met.`;
+  el.innerHTML = `<div class="term">${head('NOTICE OF TERMINATION', 'GRISHOLM & DAUGHTERS · RECEIVERS AND LIQUIDATORS', false)}
+    <p>${esc(why)} Your contract is terminated with effect from 04:00. Your debt has been sold on to a sister firm. They will be in touch.</p>
+    <table>
+      <tr><td>Nights worked</td><td class="v">${run.history.length}</td></tr>
+      <tr><td>Instalments paid</td><td class="v">${run.paid}</td></tr>
+      <tr><td>Salvage banked in all</td><td class="v">${fmtH(run.banked)}</td></tr>
+      <tr><td>Best find</td><td class="v">${esc(best)}</td></tr>
+      <tr><td>Ledger at termination</td><td class="v ${run.ledger < 0 ? 'bad' : ''}">${fmtH(run.ledger)}</td></tr>
+    </table>
+    <p class="muted">Grisholm & Daughters thank you for your service. Please return your helmet.</p>
+    <div class="foot"><button data-title>Title screen</button><button data-new>Sign a new contract</button></div></div>`;
+  el.querySelector('[data-new]').addEventListener('click', onNew);
+  el.querySelector('[data-title]').addEventListener('click', onTitle);
 }
 
-// ---- discoveries ------------------------------------------------------------------------------
+// ---- options ------------------------------------------------------------------------------------
 
-export function discoveriesPanel(el, save) {
-  const card = (key, c, kindLabel) => {
-    const found = save.isDiscovered(key);
-    const thumb = save.thumbs[key];
-    const img = found && thumb ? `<img src="${thumb}" alt="">` : `<div class="noimg${found ? ' nosignal' : ''}">${found ? 'NO SIGNAL' : '?'}</div>`;
-    return `<div class="card ${found ? '' : 'locked'}">${img}<div class="body"><div class="kindlabel">${kindLabel}</div><div class="name">${esc(found ? c.title : '? ? ?')}</div><div class="blurb">${esc(found ? c.blurb : 'Not yet found.')}</div></div></div>`;
-  };
-  const places = KIND_LIST.map((k) => card('place:' + k.id, k.card, 'PLACE')).join('');
-  const people = ENTITY_LIST.map((e) => card('entity:' + e.id, e.card, e.role === 'hunter' ? 'HUNTER' : 'RESIDENT')).join('');
-  const nP = KIND_LIST.filter((k) => save.isDiscovered('place:' + k.id)).length;
-  const nE = ENTITY_LIST.filter((e) => save.isDiscovered('entity:' + e.id)).length;
-  const nL = Object.keys(save.data.lore || {}).length;
-  el.innerHTML = `<div class="panel-inner">${head('DISCOVERIES', `${nP}/${KIND_LIST.length} places · ${nE}/${ENTITY_LIST.length} occupants · ${nL}/${KIND_LIST.length} documents · played ${fmtTime(save.data.playSeconds || 0)}`)}
-    <h3>PLACES</h3><div class="cards">${places}</div>
-    <h3>OCCUPANTS</h3><div class="cards">${people}</div></div>`;
-}
-
-// ---- options ----------------------------------------------------------------------------------
-
-export function optionsPanel(el, save, { onSettings, onImported, onNewTape }) {
+export function optionsPanel(el, save, { onSettings, onImported }) {
   const s = save.data.settings;
-  el.innerHTML = `<div class="panel-inner narrow">${head('OPTIONS', `world seed ${save.data.worldSeed}`)}
+  el.innerHTML = `<div class="term" style="max-width:640px">${head('OPTIONS', save.data.run ? `CONTRACT IN PROGRESS · NIGHT ${save.data.run.night}` : 'NO CONTRACT')}
     <div class="opt-row"><label for="opt-sens">Look sensitivity</label><input id="opt-sens" type="range" min="0.3" max="2.5" step="0.05" value="${s.sensitivity}"></div>
     <div class="opt-row"><label for="opt-vol">Volume</label><input id="opt-vol" type="range" min="0" max="1" step="0.02" value="${s.volume}"></div>
-    <h3>SAVE CODE</h3>
-    <p class="note">Your progress is saved in this browser. Copy this code to carry it somewhere else (photos stay behind).</p>
+    <p class="muted">SAVE CODE: the contract as it stood in the van before the last night. Copy it to carry it to another browser.</p>
     <textarea id="opt-export" readonly spellcheck="false"></textarea>
-    <div class="opt-row"><button id="opt-copy">Copy code</button><span id="opt-copy-msg" class="note"></span></div>
-    <textarea id="opt-import" placeholder="Paste a save code (ML2-...)" spellcheck="false"></textarea>
-    <div class="opt-row"><button id="opt-load">Load code</button><span id="opt-load-msg" class="note"></span></div>
-    <h3>TAPE</h3>
-    <div class="opt-row"><button id="opt-newtape">Start a new tape</button><span class="note">A new building. Discoveries and the logbook are kept.</span></div></div>`;
+    <div class="opt-row"><button id="opt-copy">Copy code</button><span id="opt-copy-msg" class="muted"></span></div>
+    <textarea id="opt-import" placeholder="Paste a save code (NR1-...)" spellcheck="false"></textarea>
+    <div class="opt-row"><button id="opt-load">Load code</button><span id="opt-load-msg" class="muted"></span></div></div>`;
   const $ = (q) => el.querySelector(q);
   save.exportCode().then((c) => ($('#opt-export').value = c));
   $('#opt-sens').addEventListener('input', (e) => {
@@ -235,24 +239,7 @@ export function optionsPanel(el, save, { onSettings, onImported, onNewTape }) {
   });
   $('#opt-load').addEventListener('click', async () => {
     const ok = await save.importCode($('#opt-import').value);
-    $('#opt-load-msg').textContent = ok ? 'Loaded. Rewinding...' : 'That code did not take.';
+    $('#opt-load-msg').textContent = ok ? 'Loaded. Restarting...' : 'That code did not take.';
     if (ok) setTimeout(() => onImported?.(), 600);
   });
-  let armed = false;
-  $('#opt-newtape').addEventListener('click', (e) => {
-    if (!armed) {
-      armed = true;
-      e.target.textContent = 'Really? Click again';
-      return;
-    }
-    onNewTape?.();
-  });
-}
-
-// ---- paper documents (lore) -------------------------------------------------------------------
-
-/** A typed document on paper. `body` may contain [[redacted]] spans. */
-export function paperPanel(el, doc) {
-  const body = esc(doc.body).replace(/\[\[(.+?)\]\]/g, (_, t) => `<span class="redact">${t}</span>`);
-  el.innerHTML = `<div class="paper"><div class="doc-head">${esc(doc.head)}</div>${body}${doc.sign ? `\n\n<span class="sign">${esc(doc.sign)}</span>` : ''}<div class="hint">E / Esc to put it down</div></div>`;
 }

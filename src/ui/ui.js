@@ -1,19 +1,18 @@
-// HUD and screens: the camcorder overlay (REC, timestamp), interaction prompt, captions,
-// title screen and pause screen. Plain DOM.
+// The helmet camera's overlay: crew ID, site, the 24-hour clock, the ledger, the three carry
+// slots and the weight, the interaction prompt and captions. Plain DOM, fed from game.hud().
+
+import { fmtH } from '../game/items.js';
 
 const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export class UI {
   constructor() {
-    this.hud = $('#hud');
     this.prompt = $('#prompt');
     this.captionEl = $('#caption');
-    this.stamp = $('#stamp');
-    this.rec = $('#rec');
     this.debugEl = $('#debug');
-    this.battery = $('#battery');
     this.captionTimer = 0;
-    this.captionQueue = [];
+    this.last = {};
   }
 
   show(id, on = true) {
@@ -28,29 +27,41 @@ export class UI {
     this.captionTimer = setTimeout(() => this.captionEl.classList.remove('on'), secs * 1000);
   }
 
+  /** Only touch the DOM when a value changed. */
+  set(key, el, html) {
+    if (this.last[key] === html) return;
+    this.last[key] = html;
+    el.innerHTML = html;
+  }
+
+  update(h) {
+    if (!h) return;
+    this.set('crew', $('#hud-crew'), `${esc(h.crew)} &middot; NIGHT ${h.night}`);
+    this.set('site', $('#hud-site'), esc(h.phase === 'brief' ? 'STRONGBOX · AWAITING WRIT' : `${h.site.writ} · ${h.site.name.toUpperCase()}`));
+    this.set('clock', $('#hud-clock'), h.clock);
+    $('#hud-clock').classList.toggle('late', !!h.late);
+    const left = h.due - h.night + 1;
+    this.set('ledger', $('#hud-ledger'), `LEDGER <b>${fmtH(h.ledger)}</b> &middot; INSTALMENT ${fmtH(h.target)} DUE ${left <= 1 ? 'TONIGHT' : `IN ${left} NIGHTS`}`);
+    const slots = h.slots
+      .map((s, k) => `<div class="slot${s.active ? ' active' : ''}${s.cont ? ' cont' : ''}"><div class="n">${k + 1}</div>${s.cont ? '(both hands)' : esc(s.name)}</div>`)
+      .join('');
+    this.set('slots', $('#hud-slots'), slots);
+    const kg = h.kg;
+    this.set('kg', $('#hud-kg'), kg > 0.05 ? `${kg.toFixed(1)} KG${kg > 25 ? ' · TOO HEAVY TO RUN' : ''}` : '');
+    $('#hud-kg').classList.toggle('heavy', kg > 25);
+    this.setPrompt(h.prompt);
+  }
+
   setPrompt(text) {
     if (text) {
-      this.prompt.textContent = text;
+      if (this.last.prompt !== text) this.prompt.textContent = text;
+      this.last.prompt = text;
       this.prompt.classList.add('on');
     } else this.prompt.classList.remove('on');
   }
 
-  /** The tape clock: seconds tick, but the minute never moves on. */
-  setStamp(seconds) {
-    const s = Math.floor(seconds) % 60;
-    const glitch = Math.floor(seconds / 60) % 7 === 6 && s < 3;
-    const time = glitch ? '--:--:--' : `3:14:${String(s).padStart(2, '0')} AM`;
-    this.stamp.innerHTML = `MAR. 14 1979<br>${time}`;
-  }
-
-  setRec(blink) {
-    this.rec.classList.toggle('dim', blink);
-  }
-
-  setBattery(level, on) {
-    if (!this.battery) return;
-    const bars = Math.ceil(level * 4);
-    this.battery.textContent = on ? '[' + '|'.repeat(bars) + ' '.repeat(4 - bars) + ']' : '';
+  travelProgress(done, total) {
+    $('#travel-bar').style.width = `${Math.round((done / total) * 100)}%`;
   }
 
   debug(text) {
