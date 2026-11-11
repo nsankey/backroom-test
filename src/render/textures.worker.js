@@ -446,32 +446,45 @@ const GEN = {
 
   // ---- ceilings ----
   ceilTile(rng) {
-    // 2 x 2 perforated deckhead panels of 0.6 m in a steel grid: acoustic holes in rows, a
-    // brown bloom where something leaked through from the deck above
+    // deckhead: long dark plates, 0.6 m wide, butted along their length with a deep channel
+    // between; a perforated strip down the middle of each, rivets along the edges, and a brown
+    // bloom where something leaked through from the deck above
     const [c, x] = canvas();
-    for (let j = 0; j < 2; j++)
-      for (let i = 0; i < 2; i++) {
-        const v = rng.float(0.93, 1.05);
-        x.fillStyle = rgb(168 * v, 172 * v, 170 * v);
-        x.fillRect(i * 256, j * 256, 256, 256);
-      }
-    for (let py = 18; py < S; py += 11)
-      for (let px = 18; px < S; px += 11) {
-        if (px % 256 < 16 || py % 256 < 16 || px % 256 > 244 || py % 256 > 244) continue;
-        x.fillStyle = 'rgba(40,42,42,0.55)';
-        x.fillRect(px, py, 2.6, 2.6);
-      }
-    blotches(x, S, S, rng, 3, 'rgba(130,100,56,A)', 20, 70, 0.35);
-    x.fillStyle = rgb(92, 96, 96);
-    for (const p of [0, 256]) {
-      x.fillRect(p, 0, 8, S);
-      x.fillRect(0, p, S, 8);
+    for (let i = 0; i < 2; i++) {
+      const v = rng.float(0.9, 1.06);
+      x.fillStyle = rgb(118 * v, 122 * v, 124 * v);
+      x.fillRect(i * 256, 0, 256, S);
     }
-    x.fillStyle = 'rgba(200,204,200,0.35)';
-    for (const p of [0, 256]) {
-      x.fillRect(p + 8, 0, 1.5, S);
-      x.fillRect(0, p + 8, S, 1.5);
-    }
+    for (let py = 10; py < S; py += 9)
+      for (let px = 0; px < S; px += 9) {
+        const lx = px % 256;
+        if (lx < 84 || lx > 172) continue;
+        x.fillStyle = 'rgba(16,18,20,0.7)';
+        x.fillRect(px, py, 2.4, 2.4);
+      }
+    // the perforated strip sits in a shallow tray
+    x.fillStyle = 'rgba(0,0,0,0.18)';
+    for (const p of [76, 332]) x.fillRect(p, 0, 4, S), x.fillRect(p + 100, 0, 4, S);
+    x.fillStyle = 'rgba(220,224,226,0.12)';
+    for (const p of [80, 336]) x.fillRect(p, 0, 1.5, S), x.fillRect(p + 104, 0, 1.5, S);
+    blotches(x, S, S, rng, 2, 'rgba(110,84,50,A)', 20, 70, 0.3);
+    // channels between plates, and a thin butt joint across every 1.2 m
+    x.fillStyle = rgb(30, 32, 34);
+    for (const p of [0, 256]) x.fillRect(p, 0, 10, S);
+    x.fillStyle = 'rgba(200,204,206,0.22)';
+    for (const p of [0, 256]) x.fillRect(p + 10, 0, 1.5, S);
+    x.fillStyle = 'rgba(20,22,24,0.7)';
+    x.fillRect(0, 0, S, 2.5);
+    // rivets along both edges of each plate
+    for (const p of [0, 256])
+      for (let py = 16; py < S; py += 32) {
+        for (const ox of [20, 236]) {
+          x.fillStyle = 'rgba(12,12,12,0.5)';
+          x.fillRect(p + ox - 2, py - 1, 5, 5);
+          x.fillStyle = 'rgba(190,194,196,0.45)';
+          x.fillRect(p + ox - 2, py - 2, 3, 3);
+        }
+      }
     noise(x, S, S, rng, 0.05);
     return c;
   },

@@ -10,6 +10,7 @@ import { KINDS } from './kinds/index.js';
 import { Plan } from './plan.js';
 import { SceneBuilder } from './builder.js';
 import { buildProp } from './props.js';
+import { dress } from './dress.js';
 
 // footstep surfaces: 0 soft (carpet), 1 hard (tile, rubber), 2 metal (steel plate)
 // (the deck materials keep their old names: sealedConcrete, concrete and asphalt are all
@@ -87,6 +88,7 @@ export function generateCell(ctx, cx, cz, { kindOverride = null, bake = true } =
   const propRng = rngFor(seed, 'props');
   for (const p of plan.props) buildProp(b, p, propRng.fork(`${p.type}:${p.x.toFixed(2)}:${p.z.toFixed(2)}`));
   kind.build(b, rngFor(seed, 'build'));
+  if (plan.kindId !== 'yard') dress(b, plan, rngFor(seed, 'dress'));
   b.fixtures();
 
   // props block navigation where their colliders cover a tile centre

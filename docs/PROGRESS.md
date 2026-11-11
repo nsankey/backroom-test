@@ -262,3 +262,34 @@ tools left on the derelict are written off on the manifest.
   one flat grey (cream cheat-line); the bridge tower was an invisible black slab against the
   stars (red marker lamps on its corners and the roofline, a lit strip under the windows).
 - Checks: no console errors; determinism check passes (fingerprint 656d54db); build passes.
+
+## Ship interiors log
+
+- `src/world/dress.js` runs on every derelict room after the props, before the fixtures and
+  the bake. It works from the tile grid, so every kind gets it with no changes of its own:
+  - angled panels where walls meet the ceiling (and carry on over low doorways), dark kick
+    plates at the deck;
+  - structural frames every 2 m (4 m in holds) on a grid shared by all walls, so frames face
+    each other; ribs up the chamfers; beams across narrow spaces at every frame, across wide
+    rooms at every other one, girders in holds; beams keep clear of the light fittings;
+  - pipe pairs on brackets under the chamfers on some runs;
+  - wall bays: dead control panels (a screen with a little light left, three lamps), vent
+    grilles, emergency strips, hazard plates;
+  - a colour-coded band along most rooms' walls; small guide lights at the deck by the frames;
+  - heavy collars round every doorway: hazard-banded jambs, cut top corners, a status lamp.
+    Some red lamps still throw a little red light into the room.
+- Lighting moods per room: cold (half), sodium amber, or red emergency (dimmer). About a fifth
+  of the fittings in the others are dead and the rest a touch brighter, with narrower beams,
+  so the light falls in pools.
+- Fittings: ceiling lights are slatted panels in a dark housing; tubes are caged; the hold
+  lamps are eight-sided housings with guards. The ceiling texture is long riveted plates with
+  a perforated strip, not a drop-ceiling grid.
+- Look pass 1 (corridor, hold, cold room): wide rooms had blank ceilings and holds a black void
+  overhead (beams across wide rooms, girders in holds); the hold lamps were warehouse domes
+  (ship housings); the corridor frames broke wherever a light hung near them (beams now test
+  the fittings' real footprint).
+- Look pass 2: the lighting was even and flat (dead fittings, harder and narrower beams);
+  the corridor ceiling still read as an office drop ceiling (new plate texture); the walls
+  were one grey (colour bands).
+- Checks: no console errors; determinism check passes (fingerprint 577f879f); build passes.
+  Unlit tiles rose a little (1 to 6 % by kind) on purpose.

@@ -401,8 +401,12 @@ export class SceneBuilder {
       const style = l.style || 'troffer';
       const ceil = l.ceil ?? l.y + 0.03;
       if (style === 'troffer') {
-        this.box('troffer', 0, l.y - 0.015, 0, 1.24, 0.05, 0.64, { skip: 'top', seg: 2 });
-        this.face('lamp', [-0.58, l.y - 0.018, -0.29], [1.16, 0, 0], [0, 0, 0.58], [0, 0], { glow, flicker: l.flicker, seg: 2 });
+        // a ship's ceiling light: a dark housing, three lens strips behind heavy slats
+        this.box('steelDark', 0, l.y - 0.05, 0, 1.3, 0.08, 0.7, { skip: 'top', seg: 2 });
+        for (const k of [-1, 0, 1]) {
+          this.face('lamp', [-0.56, l.y - 0.053, k * 0.2 - 0.07], [1.12, 0, 0], [0, 0, 0.14], [0, 0], { glow, flicker: l.flicker, seg: 2 });
+        }
+        for (const k of [-0.5, 0.5]) this.box('metalGrey', 0, l.y - 0.075, k * 0.2, 1.2, 0.025, 0.05);
       } else if (style === 'batten') {
         // a bare tube on a steel channel, hung on two rods
         const y = l.y;
@@ -411,14 +415,22 @@ export class SceneBuilder {
         // a laid-down cylinder runs along local +z: turn the frame so the tube runs along x
         this.push(0, 0, Math.PI / 2);
         this.cyl('lamp', 0, y, -0.72, 0.02, 1.44, { segs: 6, rx: true, glow, flicker: l.flicker, noCap: true });
+        // a wire cage round the tube: two rails under it and hoops along it
+        for (const sx of [-0.045, 0.045]) this.cyl('steelDark', sx, y - 0.035, -0.74, 0.006, 1.48, { segs: 4, rx: true, noCap: true });
+        for (let k = -2; k <= 2; k++) this.box('steelDark', 0, y - 0.04, k * 0.34, 0.1, 0.07, 0.012);
         this.pop();
       } else if (style === 'highbay') {
-        // an industrial dome on a drop rod: enamel shade, glowing lens underneath
+        // a hold lamp on a drop rod: an eight-sided housing, a lens ring, a guard of struts
         const y = l.y;
-        this.cyl('steelDark', 0, y + 0.3, 0, 0.012, ceil - y - 0.3, { segs: 4, noCap: true });
-        this.cyl('enamelGreen', 0, y, 0, 0.32, 0.26, { r1: 0.09, segs: 14, noCap: true });
-        this.cyl('steelDark', 0, y + 0.24, 0, 0.1, 0.1, { r1: 0.07, segs: 10 });
-        this.cyl('lamp', 0, y + 0.03, 0, 0.27, 0.004, { segs: 14, glow, flicker: l.flicker });
+        this.cyl('steelDark', 0, y + 0.3, 0, 0.02, ceil - y - 0.3, { segs: 4, noCap: true });
+        this.cyl('steelDark', 0, y + 0.06, 0, 0.3, 0.26, { r1: 0.18, segs: 8 });
+        this.cyl('metalGrey', 0, y + 0.02, 0, 0.32, 0.05, { segs: 8 });
+        this.cyl('lamp', 0, y + 0.016, 0, 0.26, 0.004, { segs: 8, glow, flicker: l.flicker });
+        for (let k = 0; k < 4; k++) {
+          const a = (k / 4) * Math.PI * 2 + Math.PI / 8;
+          this.box('steelDark', Math.cos(a) * 0.3, y - 0.14, Math.sin(a) * 0.3, 0.025, 0.17, 0.025);
+        }
+        this.cyl('steelDark', 0, y - 0.15, 0, 0.31, 0.02, { segs: 8, noCap: true });
       } else if (style === 'sealed') {
         // a cold-room bulkhead: a white box with a frosted lens, flush to the ceiling
         this.box('panelWhite', 0, l.y - 0.02, 0, 1.3, 0.1, 0.22, { skip: 'top', seg: 2 });
