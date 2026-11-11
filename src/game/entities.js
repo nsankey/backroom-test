@@ -34,9 +34,13 @@ export class EntitySystem {
   tick(game, actions, events) {
     this.events = events;
     const ctx = this.ctx();
+    // the closed mall is empty: nothing hunts there (they walk one floor only), and one that
+    // followed you in loses you at the doors
+    const inMall = game.currentCell?.kindId === 'fiesta';
+    if (inMall) for (const s of this.states.filter((x) => ENTITIES[x.type].role === 'hunter')) this.remove(s);
     // hunters arrive on a schedule
     // (only one at a time: a second one waits for its next window)
-    for (const h of HUNTERS) {
+    for (const h of inMall ? [] : HUNTERS) {
       if (this.states.some((s) => ENTITIES[s.type].role === 'hunter')) break;
       if (game.debugNoHunters) continue;
       if (h.schedule(game.worldSeed, game.tick) || game.forceHunter === h.id) {
@@ -75,7 +79,7 @@ export class EntitySystem {
   cellAdded(game, cell) {
     if (!cell || this.spawnedCells.has(cell.key) || !game.player) return;
     this.spawnedCells.add(cell.key);
-    if (game.save.data.meetings[cell.key]) return;
+    if (game.save.data.meetings[cell.key] || cell.kindId === 'fiesta') return;
     for (const r of RESIDENTS) {
       if (this.states.some((s) => s.type === r.id)) continue;
       if (this.states.some((s) => s.cellKey === cell.key)) break; // one resident per place

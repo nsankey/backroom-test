@@ -18,7 +18,7 @@ import { World } from '../world/world.js';
 import { CELL, N } from '../world/constants.js';
 import { packCellMask } from './save.js';
 import FRAGMENTS from '../../lore/fragments.json';
-import { createPlayer, applyLook, stepPlayer } from './player.js';
+import { createPlayer, applyLook, stepPlayer, settleHeight } from './player.js';
 import { flickerLevel } from './flicker.js';
 import { Moments } from './moments.js';
 import { Ambience } from './ambience.js';
@@ -137,7 +137,9 @@ export class Game {
     }
     this.player = createPlayer(px, pz, yaw ?? 0);
     if (s.player?.flashlight) this.player.flashlight = true;
-    this.prev = { x: px, z: pz, eye: this.player.eye, bob: 0 };
+    if (s.player?.level) this.player.level = 1;
+    settleHeight(this.player, this.world);
+    this.prev = { x: px, z: pz, y: this.player.y, eye: this.player.eye, bob: 0 };
     // warm up: compile shaders, finish neighbours
     this.renderer.compile(this.scene, this.camera);
     for (let k = 0; k < 6; k++) this.world.update(50);
@@ -190,6 +192,7 @@ export class Game {
     const p = this.player;
     if (!p || this.checkingOut) return;
     this.save.data.player = { x: +p.x.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), flashlight: p.flashlight, battery: +p.battery.toFixed(3) };
+    if (p.level) this.save.data.player.level = 1;
     this.save.write();
   }
 
@@ -209,6 +212,7 @@ export class Game {
     const events = [];
     this.prev.x = p.x;
     this.prev.z = p.z;
+    this.prev.y = p.y;
     this.prev.eye = p.eye;
     this.prev.bob = p.bob;
     if (!this.checkingOut) stepPlayer(p, actions, this.world, TICK, events);
@@ -247,7 +251,7 @@ export class Game {
 
   handleEvent(e) {
     if (e.type === 'step') {
-      const t = this.world.tileAt(e.x, e.z);
+      const t = this.world.tileAt(e.x, e.z, e.level || 0);
       this.audio.step(t && t.hard ? 'hard' : 'soft', e.run, e.crouch);
     } else if (e.type === 'flashlight') {
       this.audio.play('click');
@@ -371,10 +375,11 @@ export class Game {
       const dz = wz - p.z;
       const d = Math.hypot(dx, dz);
       if (d > it.radius) return;
+      if (wy !== undefined && Math.abs(wy - p.y) > 3.2) return; // on the other floor of a mall
       const facing = (dx * fx + dz * fz) / (d || 1);
       if (d > 0.5 && facing < 0.35) return;
       const score = d * (1.6 - facing);
-      if (score < bestScore && this.world.lineOfSight(p.x, p.z, wx, wz, 1.0)) {
+      if (score < bestScore && this.world.lineOfSight(p.x, p.z, wx, wz, p.y + 1.0, p.level)) {
         bestScore = score;
         best = { it, x: wx, y: wy, z: wz };
       }
@@ -463,6 +468,9 @@ export class Game {
         const sp = this.findOpenSpot(cell, cell.points.resident || cell.points.spawn || { x: 8, z: 8 });
         this.player.x = this.prev.x = sp.x;
         this.player.z = this.prev.z = sp.z;
+        this.player.level = 0;
+        settleHeight(this.player, this.world);
+        this.prev.y = this.player.y;
         this.player.vx = this.player.vz = 0;
         c.moved = true;
         c.movedAt = c.t;
@@ -540,7 +548,8 @@ export class Game {
     const p = this.player;
     const x = this.prev.x + (p.x - this.prev.x) * alpha;
     const z = this.prev.z + (p.z - this.prev.z) * alpha;
-    const eye = this.prev.eye + (p.eye - this.prev.eye) * alpha;
+    const py = this.prev.y + (p.y - this.prev.y) * alpha;
+    const eye = py + this.prev.eye + (p.eye - this.prev.eye) * alpha;
     const bob = this.prev.bob + (p.bob - this.prev.bob) * alpha;
     const t = this.time;
     const speedK = Math.min(1, p.speed / 3.7);
@@ -603,9 +612,11 @@ export class Game {
     p.vx = p.vz = 0;
     this.roll = 0;
     if (opts.flashlight !== undefined) p.flashlight = opts.flashlight;
-    this.prev = { x, z, eye: p.eye, bob: p.bob };
+    p.level = opts.level || 0;
     this.world.ensureAround(x, z);
     for (let k = 0; k < 4; k++) this.world.update(100);
+    settleHeight(p, this.world);
+    this.prev = { x, z, y: p.y, eye: p.eye, bob: p.bob };
     const cell = this.world.cellAt(x, z);
     if (cell !== this.currentCell) this.enterCell(cell);
     for (let k = 0; k < (opts.ticks ?? 1); k++) this.simTick();

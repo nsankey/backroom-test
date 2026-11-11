@@ -5,6 +5,7 @@
 import { hash, hashFloat } from '../core/rng.js';
 import { DOOR_TILES } from './constants.js';
 import { KINDS, KIND_LIST } from './kinds/index.js';
+import { mallBlockAt } from './fiesta/place.js';
 
 const EXTRA_DOOR_CHANCE = 0.38;
 const DOOR_STARTS = [5, 9, 14, 14, 14, 19, 23];
@@ -43,17 +44,27 @@ function doorStart(seed, tag, cx, cz) {
  */
 export function cellDoors(seed, cx, cz) {
   const mk = (s) => ({ start: s, end: s + DOOR_TILES - 1, mid: s + (DOOR_TILES - 1) / 2 });
-  return {
+  const doors = {
     N: hEdge(seed, cx, cz - 1) ? mk(doorStart(seed, 'h', cx, cz - 1)) : null,
     S: hEdge(seed, cx, cz) ? mk(doorStart(seed, 'h', cx, cz)) : null,
     W: vEdge(seed, cx - 1, cz) ? mk(doorStart(seed, 'v', cx - 1, cz)) : null,
     E: vEdge(seed, cx, cz) ? mk(doorStart(seed, 'v', cx, cz)) : null,
   };
+  // inside a mall block the cells run into each other with no wall: no doors between them
+  // (doors on the block's own edge stay, and open onto the parking lot)
+  if (mallBlockAt(seed, cx, cz)) {
+    if (mallBlockAt(seed, cx, cz - 1)) doors.N = null;
+    if (mallBlockAt(seed, cx, cz + 1)) doors.S = null;
+    if (mallBlockAt(seed, cx - 1, cz)) doors.W = null;
+    if (mallBlockAt(seed, cx + 1, cz)) doors.E = null;
+  }
+  return doors;
 }
 
 /** Which kind of place lives in this cell. */
 export function cellKindId(seed, cx, cz) {
   if (isOrigin(cx, cz)) return 'lobby';
+  if (mallBlockAt(seed, cx, cz)) return 'fiesta';
   const items = KIND_LIST.filter((k) => k.weight > 0).map((k) => [k.id, k.weight]);
   let total = 0;
   for (const [, w] of items) total += w;

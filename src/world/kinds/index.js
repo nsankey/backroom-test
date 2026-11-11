@@ -15,6 +15,7 @@ import sleepLab from './sleepLab.js';
 import ballroom from './ballroom.js';
 import laundry from './laundry.js';
 import draftingOffice from './draftingOffice.js';
+import fiesta from './fiesta.js';
 
-export const KIND_LIST = [lobby, guestCorridor, guestRooms, iceVending, sleepLab, ballroom, laundry, draftingOffice];
+export const KIND_LIST = [lobby, guestCorridor, guestRooms, iceVending, sleepLab, ballroom, laundry, draftingOffice, fiesta];
 export const KINDS = Object.fromEntries(KIND_LIST.map((k) => [k.id, k]));

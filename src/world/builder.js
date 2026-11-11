@@ -157,7 +157,10 @@ export class SceneBuilder {
       z0 = Math.min(z0, p[2]);
       z1 = Math.max(z1, p[2]);
     }
-    this.colliders.push([x0, z0, x1, z1, top]);
+    // on a two-level place, things built from the upper floor collide on the upper level only
+    const up = this.plan.up;
+    if (up && pts[0][1] >= up.y - 0.5) this.colliders.push([x0, z0, x1, z1, top, 1]);
+    else this.colliders.push([x0, z0, x1, z1, top]);
   }
 
   /** Vertical cylinder (or cone if r1 != r0). (x, y, z) = centre of the bottom. */
@@ -279,6 +282,14 @@ export class SceneBuilder {
       }
       return v;
     };
+    const multi = !!(p.up || p.ext);
+    const Z = p.zones;
+    const up = p.up;
+    // an upper-floor tile over (i, j) that you could stand on (not an escalator's slot)
+    const covered = (i, j) => {
+      const z = p.hiZ(i, j);
+      return !!z && !Z[z].ramp;
+    };
     for (let j = 0; j < N; j++)
       for (let i = 0; i < N; i++) {
         if (!p.isFloor(i, j)) continue;
@@ -302,6 +313,10 @@ export class SceneBuilder {
           const nj = j + dj;
           // a boundary doorway carries on into the neighbouring place: no wall across its end
           if (zone.boundary && !p.inside(ni, nj)) continue;
+          if (multi) {
+            this.lowerSide(zone, i, j, di, dj, ni, nj, covered);
+            continue;
+          }
           let y0;
           if (!p.isFloor(ni, nj)) y0 = 0;
           else {
@@ -312,6 +327,66 @@ export class SceneBuilder {
           this.wallFace(zone.wall, i, j, di, dj, y0, h, y0 === 0 && !zone.door);
         }
       }
+    if (!up) return;
+    // the upper floor: its own floor, ceiling and walls; open toward wells and escalators
+    for (let j = 0; j < N; j++)
+      for (let i = 0; i < N; i++) {
+        const zi = up.tiles[j * N + i];
+        if (!zi || Z[zi].ramp) continue;
+        const zone = Z[zi];
+        const fm = p.upFloorAt(i, j);
+        const y = up.y;
+        const a = gridVert(fm, i, j, y, 1);
+        const bq = gridVert(fm, i + 1, j, y, 1);
+        const c = gridVert(fm, i + 1, j + 1, y, 1);
+        const d = gridVert(fm, i, j + 1, y, 1);
+        this.buf(fm).idx.push(a, d, c, a, c, bq);
+        const cm = zone.ceilMat;
+        const h = zone.ceil;
+        const a2 = gridVert(cm, i, j, h, -1);
+        const b2 = gridVert(cm, i + 1, j, h, -1);
+        const c2 = gridVert(cm, i + 1, j + 1, h, -1);
+        const d2 = gridVert(cm, i, j + 1, h, -1);
+        this.buf(cm).idx.push(a2, c2, d2, a2, b2, c2);
+        for (const [di, dj] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+          const ni = i + di;
+          const nj = j + dj;
+          const nz = p.hiZ(ni, nj);
+          if (nz && Z[nz].ramp) continue; // the top of an escalator
+          if (nz) {
+            const nc = Z[nz].ceil;
+            if (nc < h - 0.001) this.wallFace(zone.wall, i, j, di, dj, nc, h, false);
+            continue;
+          }
+          const lz = p.loZ(ni, nj);
+          if (lz && Z[lz].ceil > y + 0.01) {
+            // a well: open, apart from any wall above the well's own ceiling
+            const c0 = Z[lz].ceil;
+            if (c0 < h - 0.001) this.wallFace(zone.wall, i, j, di, dj, c0, h, false);
+          } else this.wallFace(zone.wall, i, j, di, dj, y, h, !zone.door);
+        }
+      }
+  }
+
+  /** Lower-level side faces on a place with an upper floor (or that runs on past its edges). */
+  lowerSide(zone, i, j, di, dj, ni, nj, covered) {
+    const p = this.plan;
+    const Z = p.zones;
+    const top = zone.ceil;
+    const nz = p.loZ(ni, nj);
+    const covN = p.up && covered(ni, nj);
+    // where the neighbour has an upper floor, this side's lower part stops at the slab's top
+    const cap = covN ? Math.min(top, p.up.y) : top;
+    if (!nz) this.wallFace(zone.wall, i, j, di, dj, 0, cap, !zone.door);
+    else {
+      const nc = Z[nz].ceil;
+      if (nc < cap - 0.001) this.wallFace(zone.wall, i, j, di, dj, nc, cap, false);
+    }
+    // a well rising past the upper floor next door: face from that floor's ceiling up to ours
+    if (covN && top > p.up.y) {
+      const c1 = Z[p.hiZ(ni, nj)].ceil;
+      if (c1 < top - 0.001) this.wallFace(zone.wall, i, j, di, dj, c1, top, false);
+    }
   }
 
   wallFace(mat, i, j, di, dj, y0, y1, baseboard) {
@@ -330,8 +405,8 @@ export class SceneBuilder {
       const off = 0.012;
       const ox = o[0] - di * off;
       const oz = o[2] - dj * off;
-      this.face('baseboard', [ox, 0, oz], u, [0, 0.1, 0], [uv0[0], 0]);
-      this.face('baseboard', [ox, 0.1, oz], u, [di * off, 0, dj * off], [uv0[0], 0]);
+      this.face('baseboard', [ox, y0, oz], u, [0, 0.1, 0], [uv0[0], 0]);
+      this.face('baseboard', [ox, y0 + 0.1, oz], u, [di * off, 0, dj * off], [uv0[0], 0]);
     }
   }
 
@@ -359,6 +434,7 @@ export class SceneBuilder {
     const dz = bz - az;
     const len = Math.hypot(dx, dz);
     const steps = Math.ceil(len / 0.17);
+    const multi = this._multi;
     for (let s = 1; s < steps; s++) {
       const t = s / steps;
       const x = ax + dx * t;
@@ -366,26 +442,34 @@ export class SceneBuilder {
       const y = ay + dy * t;
       const i = Math.floor(x / TILE);
       const j = Math.floor(z / TILE);
+      if (multi) {
+        if (!p.openAt(i, j, y)) return false;
+        continue;
+      }
       if (!p.isFloor(i, j)) return false;
       if (y > p.ceilAt(i, j) + 0.02 || y < -0.02) return false;
     }
     return true;
   }
 
-  /** Fraction of solid tiles in a 2x2 sample around (x, z). */
-  solidFrac(x, z) {
+  /** Fraction of solid tiles in a 2x2 sample around (x, z) (at height y on two-level places). */
+  solidFrac(x, z, y = 0) {
     const p = this.plan;
     let s = 0;
     for (const [ox, oz] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) {
-      if (!p.isFloor(Math.floor((x + ox) / TILE), Math.floor((z + oz) / TILE))) s++;
+      const i = Math.floor((x + ox) / TILE);
+      const j = Math.floor((z + oz) / TILE);
+      if (this._multi ? !p.openAt(i, j, y) : !p.isFloor(i, j)) s++;
     }
     return s / 4;
   }
 
   bake() {
     const p = this.plan;
-    const lights = p.lights;
+    this._multi = !!(p.up || p.ext);
+    const lights = p.extLights.length ? [...p.lights, ...p.extLights] : p.lights;
     const amb = p.ambient;
+    const up = p.up;
     for (const b of this.bufs.values()) {
       if (b.glow) continue;
       const n = b.count;
@@ -403,14 +487,28 @@ export class SceneBuilder {
         const sz = pz + nz * 0.06;
         const ti = Math.floor(sx / TILE);
         const tj = Math.floor(sz / TILE);
-        const ceil = p.isFloor(ti, tj) ? p.ceilAt(ti, tj) : 2.8;
-        const sf = this.solidFrac(sx, sz);
-        const hf = Math.min(1, Math.exp(-Math.max(0, sy) / 0.45) + Math.exp(-Math.max(0, ceil - sy) / 0.5) * 0.6);
+        let ceil;
+        let base = 0;
+        if (this._multi) {
+          // which storey is this point in?
+          const z1 = up ? p.hiZ(ti, tj) : 0;
+          if (z1 && !p.zones[z1].ramp && sy >= up.y - 0.1) {
+            base = up.y;
+            ceil = p.zones[z1].ceil;
+          } else {
+            const z0 = p.loZ(ti, tj);
+            ceil = z0 ? p.zones[z0].ceil : 2.8;
+          }
+        } else ceil = p.isFloor(ti, tj) ? p.ceilAt(ti, tj) : 2.8;
+        const sf = this.solidFrac(sx, sz, this._multi ? Math.max(base + 0.05, Math.min(ceil - 0.05, sy)) : 0);
+        const hf = Math.min(1, Math.exp(-Math.max(0, sy - base) / 0.45) + Math.exp(-Math.max(0, ceil - sy) / 0.5) * 0.6);
         const ao = 1 - 0.75 * sf * hf - 0.12 * hf;
         // contact shadows: floor under and around furniture
         let contact = 1;
-        if (ny > 0.5 && py < 0.05) {
+        const floorLevel = ny > 0.5 ? (py < 0.05 ? 0 : up && Math.abs(py - up.y) < 0.05 ? 1 : -1) : -1;
+        if (floorLevel >= 0) {
           for (const c of this.colliders) {
+            if ((c[5] || 0) !== floorLevel) continue;
             const ex = Math.max(c[0] - px, 0, px - c[2]);
             const ez = Math.max(c[1] - pz, 0, pz - c[3]);
             const dd = Math.hypot(ex, ez);

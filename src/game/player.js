@@ -11,6 +11,8 @@ export function createPlayer(x, z, yaw = 0) {
   return {
     x,
     z,
+    y: 0, // feet height: 0, or a place's upper floor, or partway up an escalator
+    level: 0, // which floor's tiles and colliders apply (0 lower, 1 upper)
     yaw,
     pitch: 0,
     vx: 0,
@@ -68,7 +70,7 @@ export function stepPlayer(p, a, world, dt, events) {
   const before = Math.floor(p.bob / Math.PI);
   p.bob += (moved / stride) * Math.PI;
   if (Math.floor(p.bob / Math.PI) !== before && moved > 0.001) {
-    events.push({ type: 'step', x: p.x, z: p.z, run: running, crouch: p.crouch > 0.5 });
+    events.push({ type: 'step', x: p.x, z: p.z, level: p.level, run: running, crouch: p.crouch > 0.5 });
   }
   if (moved < 0.0005) p.bob += (Math.round(p.bob / Math.PI) * Math.PI - p.bob) * Math.min(1, dt * 4);
   p.eye = EYE + (EYE_CROUCH - EYE) * p.crouch;
@@ -89,8 +91,9 @@ function move(p, world, dx, dz) {
   for (let s = 0; s < steps; s++) {
     p.x += dx / steps;
     p.z += dz / steps;
+    settleHeight(p, world);
     for (let it = 0; it < 3; it++) {
-      world.collidersNear(p.x, p.z, PLAYER_RADIUS, _boxes);
+      world.collidersNear(p.x, p.z, PLAYER_RADIUS, _boxes, p.level);
       let pushed = false;
       for (const b of _boxes) {
         const cx = Math.max(b[0], Math.min(p.x, b[2]));
@@ -123,4 +126,21 @@ function move(p, world, dx, dz) {
       if (!pushed) break;
     }
   }
+  settleHeight(p, world);
+}
+
+/**
+ * Feet height and floor level from where the player stands: on an escalator the height follows
+ * the incline and the level flips halfway up; elsewhere the height is the level's floor.
+ */
+export function settleHeight(p, world) {
+  const ry = world.rampHeight(p.x, p.z);
+  if (ry !== null) {
+    const up = world.levelY(p.x, p.z, 1);
+    p.y = ry;
+    p.level = ry > up / 2 ? 1 : 0;
+    return;
+  }
+  if (p.level && !world.cellAt(p.x, p.z)?.upper) p.level = 0; // walked off a multi-level place
+  p.y = world.levelY(p.x, p.z, p.level);
 }

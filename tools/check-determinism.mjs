@@ -8,6 +8,8 @@ import { generateCell } from '../src/world/gen.js';
 import { KIND_LIST } from '../src/world/kinds/index.js';
 import { hashStr } from '../src/core/rng.js';
 import { readFileSync } from 'node:fs';
+import { checkMallConnectivity } from '../src/world/fiesta/mall.js';
+import { homeMallBlock, BW, BH } from '../src/world/fiesta/place.js';
 
 const perKind = Number(process.argv[2] || 40);
 
@@ -87,6 +89,45 @@ for (const kind of KIND_LIST) {
   } else if (words > 140) console.log(`  lore note: ${kind.id} body is ${words} words (rule: ~120)`);
 }
 for (const id of Object.keys(lore.fragments)) if (!KIND_LIST.some((k) => k.id === id)) console.log(`  lore note: fragment for unknown kind ${id}`);
+
+// the closed mall: one building across many cells, two floors. Every walkable tile of both
+// floors reachable from the parking lot, and a spread of its real cells generate cleanly.
+{
+  const t1 = Date.now();
+  const conn = checkMallConnectivity();
+  if (conn.lost) {
+    console.log(`  MALL: ${conn.lost} of ${conn.total} walkable tiles unreachable, e.g. ${JSON.stringify(conn.where)}`);
+    failures++;
+  }
+  let bad = 0;
+  let cells = 0;
+  let ms = 0;
+  for (const seed of [1979, 4242]) {
+    const home = homeMallBlock(seed);
+    const step = Number(process.argv[3] || 4);
+    for (let lz = 0; lz < BH; lz += step)
+      for (let lx = (lz / step) % 2; lx < BW; lx += step) {
+        const cx = home.bx + lx;
+        const cz = home.bz + lz;
+        const a = generateCell(seed, cx, cz).data;
+        cells++;
+        ms += a.ms;
+        if (a.kindId !== 'fiesta' || a.notes.length) {
+          bad++;
+          if (bad <= 3) console.log(`  fiesta seed ${seed} cell ${cx},${cz} (${a.kindId}): ${a.notes.join('; ')}`);
+        }
+        if (cells % 9 === 0 && fingerprint(a) !== fingerprint(generateCell(seed, cx, cz).data)) {
+          console.log(`  NON-DETERMINISTIC: fiesta block cell ${cx},${cz}`);
+          bad++;
+        }
+      }
+  }
+  if (bad) failures++;
+  console.log(
+    `${bad ? 'FAIL' : 'ok  '} mall block     ${cells} cells, ${bad} with problems, avg ${(ms / cells).toFixed(0)} ms, ` +
+      `${conn.total} walkable tiles on 2 floors, ${conn.lost} unreachable (${((Date.now() - t1) / 1000).toFixed(1)} s)`,
+  );
+}
 
 // world fingerprint: a 5 x 5 patch of seed 1979
 let world = '';

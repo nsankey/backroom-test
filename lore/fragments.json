@@ -9,7 +9,7 @@
     "6. Length: `body` at most ~120 words. `[[text]]` renders as a redaction bar (use at most two per document). `\\n` is a line break.",
     "7. `log` is the logbook line the player writes after reading: first person, past tense, at most 25 words, states what was read, not what it means.",
     "8. `head` is the document's own header line (form title, letterhead, label). `sign` is an optional signature or footer.",
-    "9. Threads in use so far: volunteers, watches, checkingOut, keepLightsOn, halesPlans, theSeal. Spread new documents across threads; do not reveal theSeal or the end of halesPlans in a place that is common."
+    "9. Threads in use so far: volunteers, watches, checkingOut, keepLightsOn (x2), halesPlans, theSeal. Spread new documents across threads; do not reveal theSeal or the end of halesPlans in a place that is common."
   ],
   "fragments": {
     "lobby": {
@@ -67,6 +67,13 @@
       "body": "Ilse,\n\nYou asked for a current plan. I can't give you one. I measure a hall, come back to the board, and the hall I measured has already changed to match the drawing. So I drew a short one. In the morning it was short.\n\nI have stopped drawing doors. I have stopped drawing anything I would not want to walk into.\n\nI am no longer sure I am drawing what is there. I am beginning to think it is [[waiting to see what I draw]].\n\nPlease do not ask me for room 240 again. I never drew it.",
       "sign": "- D.H.  (copy left on the board)",
       "log": "A memo from Desmond Hale to Dr. Varga. He measured halls that changed to match his drawings, and stopped drawing doors."
+    },
+    "fiesta": {
+      "thread": "keepLightsOn",
+      "head": "SHOPPING CENTER DIRECTORY  -  YOU ARE HERE",
+      "body": "LOWER LEVEL\n  104  Quartz Time Watch Repair\n  109  Everlit Candles\n  112  Meridian Travel\n  118  Customer Service\n\nUPPER LEVEL\n  203  Everlit Candles\n  207  Stardust Records & Tapes\n  211  Everlit Candles\n  Food Court, all stalls\n\nDepartment stores at all four corners. Opening soon.\n\nCenter hours  --:--  to  --:--\nFor the security of tenants and shoppers the Center remains fully lit after closing. Tenants are not to switch off any fixture when they lower their shutters.\n\nThe red dot marks where you are standing. If the dot is inside a store, [[do not look for the entrance]].",
+      "sign": "Grand Opening, October 1979. Lost watches may be claimed at Customer Service.",
+      "log": "A directory on a kiosk. The same candle shop three times. The lights stay on after closing. The red dot was inside a store."
     }
   }
 }

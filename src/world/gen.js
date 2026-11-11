@@ -9,14 +9,14 @@ import { Plan } from './plan.js';
 import { SceneBuilder } from './builder.js';
 import { buildProp } from './props.js';
 
-const HARD = new Set(['terrazzo', 'vinylCheck', 'whiteTile', 'concrete', 'threshold', 'stainless', 'parquet']);
+const HARD = new Set(['terrazzo', 'vinylCheck', 'whiteTile', 'concrete', 'threshold', 'stainless', 'parquet', 'mallTile', 'asphalt', 'foodTile', 'laminate', 'vinylBrown']);
 
 export function planCell(worldSeed, cx, cz, kindOverride = null) {
   const kindId = kindOverride || cellKindId(worldSeed, cx, cz);
   const kind = KINDS[kindId];
   const doors = cellDoors(worldSeed, cx, cz);
   const seed = hash(worldSeed, 'cell', cx, cz);
-  const plan = new Plan({ seed, cx, cz, doors, kindId });
+  const plan = new Plan({ seed, cx, cz, doors, kindId, worldSeed });
   kind.layout(seed, plan);
   plan.openBoundaryDoors(kind.doorMats || {});
   return { plan, kind, seed };
@@ -32,13 +32,14 @@ export function generateCell(worldSeed, cx, cz, { kindOverride = null, bake = tr
   kind.build(b, rngFor(seed, 'build'));
   b.fixtures();
 
-  // props block navigation where their colliders cover a tile centre
-  for (const [x0, z0, x1, z1] of b.colliders) {
+  // props block navigation where their colliders cover a tile centre (on their own level)
+  for (const [x0, z0, x1, z1, , level] of b.colliders) {
+    const blocked = level ? plan.up.blocked : plan.blocked;
     for (let j = Math.max(0, Math.floor(z0 / TILE)); j <= Math.min(N - 1, Math.floor(z1 / TILE)); j++)
       for (let i = Math.max(0, Math.floor(x0 / TILE)); i <= Math.min(N - 1, Math.floor(x1 / TILE)); i++) {
         const cxm = (i + 0.5) * TILE;
         const czm = (j + 0.5) * TILE;
-        if (cxm > x0 - 0.1 && cxm < x1 + 0.1 && czm > z0 - 0.1 && czm < z1 + 0.1) plan.blocked[j * N + i] = 1;
+        if (cxm > x0 - 0.1 && cxm < x1 + 0.1 && czm > z0 - 0.1 && czm < z1 + 0.1) blocked[j * N + i] = 1;
       }
   }
   const chk = plan.checkDoors();
@@ -53,8 +54,24 @@ export function generateCell(worldSeed, cx, cz, { kindOverride = null, bake = tr
   const hard = new Uint8Array(N * N);
   for (let k = 0; k < N * N; k++) if (tiles[k] && HARD.has(plan.floorAt(k % N, (k / N) | 0))) hard[k] = 1;
   transfer.push(zoneCeil.buffer, zoneDoor.buffer, hard.buffer);
+  // the upper floor, when there is one: its tiles, blocked and hard masks, and the escalators
+  let upper = null;
+  if (plan.up) {
+    const up = plan.up;
+    const hard1 = new Uint8Array(N * N);
+    const tiles1 = up.tiles;
+    for (let k = 0; k < N * N; k++) {
+      const z = tiles1[k];
+      if (z && plan.zones[z].ramp) hard1[k] = 1;
+      else if (z && HARD.has(plan.upFloorAt(k % N, (k / N) | 0))) hard1[k] = 1;
+    }
+    upper = { y: up.y, tiles: tiles1, blocked: up.blocked, hard: hard1 };
+    transfer.push(tiles1.buffer, up.blocked.buffer, hard1.buffer);
+  }
   return {
     data: {
+      upper,
+      ramps: plan.ramps,
       cx,
       cz,
       seed,

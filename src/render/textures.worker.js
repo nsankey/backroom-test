@@ -3,6 +3,7 @@
 
 import { RNG, hash } from '../core/rng.js';
 import { SIGN_ROWS, SIGN_ROW_COUNT } from '../world/signs.js';
+import { mallGenerators } from './mallTextures.js';
 
 const S = 512;
 
@@ -802,6 +803,9 @@ function signAtlas(rng, glow) {
   noise(x, W, rowH * R, rng, 0.05);
   return c;
 }
+
+// the mall's textures (render/mallTextures.js), drawn with the helpers above
+Object.assign(GEN, mallGenerators({ canvas, rgb, noise, blotches, S }));
 
 // ---- worker plumbing ----------------------------------------------------------------------
 

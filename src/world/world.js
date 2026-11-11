@@ -4,9 +4,13 @@
 import * as THREE from 'three';
 import { CELL, TILE, N, cellKey } from './constants.js';
 import { KINDS } from './kinds/index.js';
+import { mallBlockAt } from './fiesta/place.js';
 
 const LOAD_RADIUS = 1; // 3 x 3 cells around the player
 const KEEP_RADIUS = 2;
+// a mall is open for tens of metres in every direction: stream further while inside one
+const MALL_LOAD_RADIUS = 2;
+const MALL_KEEP_RADIUS = 3;
 
 export class World {
   constructor(scene, materials, worldSeed) {
@@ -44,14 +48,17 @@ export class World {
   ensureAround(x, z) {
     const ccx = Math.floor(x / CELL);
     const ccz = Math.floor(z / CELL);
+    const mall = !!mallBlockAt(this.seed, ccx, ccz);
+    const load = mall ? MALL_LOAD_RADIUS : LOAD_RADIUS;
+    const keep = mall ? MALL_KEEP_RADIUS : KEEP_RADIUS;
     const order = [];
-    for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++)
-      for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) order.push([ccx + dx, ccz + dz, Math.abs(dx) + Math.abs(dz)]);
+    for (let dz = -load; dz <= load; dz++)
+      for (let dx = -load; dx <= load; dx++) order.push([ccx + dx, ccz + dz, Math.abs(dx) + Math.abs(dz)]);
     order.sort((a, b) => a[2] - b[2]);
     for (const [cx, cz] of order) this.request(cx, cz);
     // unload far cells
     for (const [key, cell] of this.cells) {
-      if (Math.abs(cell.cx - ccx) > KEEP_RADIUS || Math.abs(cell.cz - ccz) > KEEP_RADIUS) this.unload(key);
+      if (Math.abs(cell.cx - ccx) > keep || Math.abs(cell.cz - ccz) > keep) this.unload(key);
     }
     return this.requested.get(cellKey(ccx, ccz));
   }
@@ -139,14 +146,23 @@ export class World {
     return this.cells.get(cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
   }
 
-  /** Tile info at a world position: { cell, i, j, floor, ceil, door } or null if unloaded. */
-  tileAt(x, z) {
+  /**
+   * Tile info at a world position: { cell, i, j, floor, ceil, door } or null if unloaded.
+   * level 1 asks about a place's upper floor (none on single-level places: never floor).
+   */
+  tileAt(x, z, level = 0) {
     const cell = this.cellAt(x, z);
     if (!cell) return null;
     const i = Math.floor((x - cell.ox) / TILE);
     const j = Math.floor((z - cell.oz) / TILE);
     if (i < 0 || j < 0 || i >= N || j >= N) return null;
-    const zi = cell.tiles[j * N + i];
+    const k = j * N + i;
+    if (level) {
+      const u = cell.upper;
+      const zi = u ? u.tiles[k] : 0;
+      return { cell, i, j, floor: zi !== 0, ceil: cell.zoneCeil[zi], door: false, blocked: !!u && u.blocked[k] === 1, hard: !!u && u.hard[k] === 1 };
+    }
+    const zi = cell.tiles[k];
     return {
       cell,
       i,
@@ -154,26 +170,50 @@ export class World {
       floor: zi !== 0,
       ceil: cell.zoneCeil[zi],
       door: cell.zoneDoor[zi] === 1,
-      blocked: cell.blocked[j * N + i] === 1,
-      hard: cell.hard[j * N + i] === 1,
+      blocked: cell.blocked[k] === 1,
+      hard: cell.hard[k] === 1,
     };
   }
 
-  isFloor(x, z) {
-    const t = this.tileAt(x, z);
+  isFloor(x, z, level = 0) {
+    const t = this.tileAt(x, z, level);
     return !!t && t.floor;
   }
 
-  isWalkable(x, z) {
-    const t = this.tileAt(x, z);
+  isWalkable(x, z, level = 0) {
+    const t = this.tileAt(x, z, level);
     return !!t && t.floor && !t.blocked;
+  }
+
+  /** Height of the floor of a level at (x, z): 0, or the upper floor's height. */
+  levelY(x, z, level) {
+    if (!level) return 0;
+    return this.cellAt(x, z)?.upper?.y ?? 0;
+  }
+
+  /** Height of an escalator under (x, z), or null when not on one. */
+  rampHeight(x, z) {
+    const cell = this.cellAt(x, z);
+    if (!cell || !cell.ramps?.length || !cell.upper) return null;
+    const lx = x - cell.ox;
+    const lz = z - cell.oz;
+    for (const r of cell.ramps) {
+      if (lx < r.x0 || lx > r.x1 || lz < r.z0 || lz > r.z1) continue;
+      // flat landings at both ends (1.2 m), the incline between
+      const len = r.z1 - r.z0 - 2.4;
+      let t = r.dir > 0 ? (lz - r.z0 - 1.2) / len : (r.z1 - 1.2 - lz) / len;
+      t = Math.max(0, Math.min(1, t));
+      return t * cell.upper.y;
+    }
+    return null;
   }
 
   /**
    * Axis-aligned boxes near (x, z) that a body of radius r collides with: solid tiles and
    * prop colliders, in world coordinates. Out-of-world (unloaded) tiles count as solid.
+   * Only things on the given level count.
    */
-  collidersNear(x, z, r, out = []) {
+  collidersNear(x, z, r, out = [], level = 0) {
     out.length = 0;
     const reach = r + TILE;
     const i0 = Math.floor((x - reach) / TILE);
@@ -184,15 +224,22 @@ export class World {
       for (let i = i0; i <= i1; i++) {
         const wx = (i + 0.5) * TILE;
         const wz = (j + 0.5) * TILE;
-        const t = this.tileAt(wx, wz);
+        const t = this.tileAt(wx, wz, level);
         if (!t || !t.floor) out.push([i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]);
       }
+    // props can reach a few metres past their own cell (a fountain, an escalator): on a mall,
+    // look at the cells around as well
     const seen = new Set();
-    for (const [dx, dz] of [[0, 0], [-reach, 0], [reach, 0], [0, -reach], [0, reach]]) {
+    const home = this.cellAt(x, z);
+    const probes = home?.upper ? MALL_PROBES : NEAR_PROBES;
+    for (const [px, pz] of probes) {
+      const dx = px === 'r' ? reach : px === '-r' ? -reach : px;
+      const dz = pz === 'r' ? reach : pz === '-r' ? -reach : pz;
       const cell = this.cellAt(x + dx, z + dz);
       if (!cell || seen.has(cell)) continue;
       seen.add(cell);
       for (const c of cell.colliders) {
+        if ((c[5] || 0) !== level) continue;
         const bx0 = c[0] + cell.ox;
         const bz0 = c[1] + cell.oz;
         const bx1 = c[2] + cell.ox;
@@ -292,14 +339,14 @@ export class World {
   }
 
   /** Line of sight in xz across loaded tiles at a given height. (See Heap below.) */
-  lineOfSight(ax, az, bx, bz, y = 1.5) {
+  lineOfSight(ax, az, bx, bz, y = 1.5, level = 0) {
     const dx = bx - ax;
     const dz = bz - az;
     const len = Math.hypot(dx, dz);
     const steps = Math.ceil(len / 0.2);
     for (let s = 1; s < steps; s++) {
       const t = s / steps;
-      const tile = this.tileAt(ax + dx * t, az + dz * t);
+      const tile = this.tileAt(ax + dx * t, az + dz * t, level);
       if (!tile || !tile.floor || tile.ceil < y) return false;
     }
     return true;
@@ -310,6 +357,9 @@ export class World {
     this.worker.terminate();
   }
 }
+
+const NEAR_PROBES = [[0, 0], ['-r', 0], ['r', 0], [0, '-r'], [0, 'r']];
+const MALL_PROBES = [[0, 0], [-CELL, 0], [CELL, 0], [0, -CELL], [0, CELL], [-CELL, -CELL], [CELL, -CELL], [-CELL, CELL], [CELL, CELL]];
 
 /** Minimal binary min-heap on item[3] (f-score) for A*. */
 class Heap {

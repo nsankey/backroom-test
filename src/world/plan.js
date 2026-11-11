@@ -5,12 +5,23 @@ import { N, TILE, DIRS, DOOR_HEIGHT, INNER_DOOR_HEIGHT } from './constants.js';
 import { doorTiles, doorInside } from './doors.js';
 
 export class Plan {
-  constructor({ seed, cx, cz, doors, kindId }) {
+  constructor({ seed, cx, cz, doors, kindId, worldSeed = 0 }) {
     this.seed = seed;
+    this.worldSeed = worldSeed;
     this.cx = cx;
     this.cz = cz;
     this.doors = doors;
     this.kindId = kindId;
+    // Multi-level places (the mall) add an upper floor with addUpper(): a second tile layer whose
+    // zones carry absolute ceiling heights. Where the lower floor is open and the upper layer has
+    // no tile, the lower space rises through it (a well). Escalators are `ramps`: rects walkable
+    // on both levels, whose height runs from 0 to up.y along their axis.
+    this.up = null;
+    this.ramps = [];
+    // ext(i, j) -> [lowerZone, upperZone] for tiles beyond the cell edge, for places that run on
+    // into their neighbours with no wall between (zone indices are this plan's). null: solid.
+    this.ext = null;
+    this.extLights = []; // neighbours' lights that reach in (baked here, not drawn)
     // zone 0 is "solid": no floor, no ceiling
     this.zones = [{ name: 'solid', ceil: 0 }];
     this.tiles = new Uint8Array(N * N);
@@ -41,6 +52,35 @@ export class Plan {
   }
   ceilAt(i, j) {
     return this.zoneAt(i, j).ceil;
+  }
+
+  /** Add an upper floor at height y. */
+  addUpper(y) {
+    this.up = { y, tiles: new Uint8Array(N * N), blocked: new Uint8Array(N * N), floorMat: new Array(N * N).fill(null) };
+    return this.up;
+  }
+  /** Lower-level zone index at (i, j), looking past the cell edge when the place continues there. */
+  loZ(i, j) {
+    if (this.inside(i, j)) return this.tiles[j * N + i];
+    return this.ext ? this.ext(i, j)[0] : 0;
+  }
+  /** Upper-level zone index at (i, j) (0: no upper floor). */
+  hiZ(i, j) {
+    if (!this.up) return 0;
+    if (this.inside(i, j)) return this.up.tiles[j * N + i];
+    return this.ext ? this.ext(i, j)[1] : 0;
+  }
+  upFloorAt(i, j) {
+    const k = j * N + i;
+    return this.up.floorMat[k] || this.zones[this.up.tiles[k]].floor;
+  }
+  /** Is the point (tile i, j, height y) open air? Used by the light bake on two-level places. */
+  openAt(i, j, y) {
+    const z0 = this.loZ(i, j);
+    if (z0 && y >= -0.02 && y <= this.zones[z0].ceil + 0.02) return true;
+    if (!this.up) return false;
+    const z1 = this.hiZ(i, j);
+    return !!z1 && !this.zones[z1].ramp && y >= this.up.y - 0.02 && y <= this.zones[z1].ceil + 0.02;
   }
   floorAt(i, j) {
     const k = this.idx(i, j);

@@ -2,6 +2,8 @@
 // faces +z and its origin is on the floor (wall props: origin on the wall surface).
 // Recipes are pure: geometry comes only from params and the rng passed in.
 
+import { MALL_PROPS } from './fiesta/props.js';
+
 const PI = Math.PI;
 
 function legs(b, mat, w, d, h, inset = 0.04, r = 0.018) {
@@ -612,6 +614,9 @@ export const PROPS = {
     b.collideBox(0, 0, s, s * 1.1, s * 0.8);
   },
 };
+
+// the mall's fittings (src/world/fiesta/props.js)
+Object.assign(PROPS, MALL_PROPS);
 
 /** Run a prop recipe at its place. */
 export function buildProp(b, p, rng) {

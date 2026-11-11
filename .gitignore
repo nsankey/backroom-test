@@ -6,3 +6,6 @@ dist/
 Thumbs.db
 shots/
 .claude/
+
+# Fiesta Mall reference images: other people's copyright, never commit or ship
+docs/references/

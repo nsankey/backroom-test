@@ -162,8 +162,13 @@ export function packCellMask(cell, n) {
   const bytes = new Uint8Array((n * n) / 4);
   const half = (n * n) / 8;
   for (let k = 0; k < n * n; k++) {
-    if (cell.tiles[k] !== 0) bytes[k >> 3] |= 1 << (k & 7);
-    if (cell.blocked[k] === 1) bytes[half + (k >> 3)] |= 1 << (k & 7);
+    // a two-storey place maps as both floors laid over each other
+    const up = cell.upper;
+    const floor = cell.tiles[k] !== 0;
+    const upFloor = !!up && up.tiles[k] !== 0;
+    if (floor || upFloor) bytes[k >> 3] |= 1 << (k & 7);
+    const blocked = (!floor || cell.blocked[k] === 1) && (!upFloor || up.blocked[k] === 1);
+    if (blocked && (floor || upFloor)) bytes[half + (k >> 3)] |= 1 << (k & 7);
   }
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);

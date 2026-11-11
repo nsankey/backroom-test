@@ -66,6 +66,29 @@ const DEFS = {
   enamel: { color: 0xd6d4c8 },
   draftBoard: { color: 0xc8c4ae },
   glass: { color: 0x10120f },
+  // the mall
+  asphalt: { tex: 'asphalt', scale: [5.5, 5.5] },
+  stucco: { tex: 'stucco', scale: [3, 3] },
+  anchorPanel: { tex: 'stucco', scale: [2.4, 2.4], color: 0xc8beb0 },
+  nightSky: { tex: 'nightSky', scale: [8, 8] },
+  mallTile: { tex: 'mallTile', scale: [2.4, 2.4] },
+  mallWall: { tex: 'mallWall', scale: [2, 2] },
+  mallCeil: { tex: 'mallCeil', scale: [2, 2] },
+  skylight: { tex: 'skylight', scale: [3, 3] },
+  foodTile: { tex: 'foodTile', scale: [1.2, 1.2] },
+  grille: { tex: 'grille', scale: [1, 1] },
+  escalatorStep: { tex: 'escalatorStep', scale: [0.4, 0.4] },
+  basinDry: { tex: 'basinDry', scale: [1, 1] },
+  shopSigns: { tex: 'shopSigns', scale: [1, 1] },
+  ghostSign: { tex: 'ghostSign', scale: [1, 1] },
+  mallTeal: { color: 0x3e7f7a },
+  mallTrim: { color: 0xd4d0c4 },
+  rubber: { color: 0x141414 },
+  deadLeaf: { color: 0x6a5232 },
+  voidBlack: { color: 0x060606 },
+  glassDark: { color: 0x2a3236 },
+  railGlass: { color: 0x8a9e9a, opacity: 0.13 },
+  doorGlass: { color: 0x7a908c, opacity: 0.3 },
   // glow (emissive) surfaces: colour comes from the baked vertex colour
   lamp: { glow: true },
   shade: { glow: true, color: 0xffffff },
@@ -74,10 +97,13 @@ const DEFS = {
   signsGlow: { glow: true, tex: 'signsGlow', scale: [1, 1] },
   vendingGlow: { glow: true, tex: 'vendingGlow', scale: [1, 1] },
   scope: { glow: true, tex: 'scope', scale: [1, 1], animate: 'scroll' },
+  shopSignsGlow: { glow: true, tex: 'shopSignsGlow', scale: [1, 1] },
+  mallDirectory: { glow: true, tex: 'mallDirectory', scale: [1, 1] },
+  menuBoard: { glow: true, tex: 'menuBoard', scale: [1, 1] },
 };
 
 // textures whose UVs are explicit (uvRect) rather than metres
-const EXPLICIT_UV = new Set(['clockFace', 'digits', 'signs', 'signsGlow', 'vendingGlow', 'scope', 'tvStatic', 'blueprint', 'planSheet']);
+const EXPLICIT_UV = new Set(['clockFace', 'digits', 'signs', 'signsGlow', 'vendingGlow', 'scope', 'tvStatic', 'blueprint', 'planSheet', 'shopSigns', 'shopSignsGlow', 'mallDirectory', 'menuBoard', 'ghostSign']);
 
 export class MaterialLibrary {
   constructor(renderer) {
@@ -156,6 +182,13 @@ export class MaterialLibrary {
   _makeLit(name, def) {
     const m = new THREE.MeshLambertMaterial({ color: def.color ?? 0xffffff, map: this._texFor(name, def) });
     m.userData.kind = 'lit';
+    if (def.opacity) {
+      // glass: see-through, seen from both sides, drawn after the solid world
+      m.transparent = true;
+      m.opacity = def.opacity;
+      m.depthWrite = false;
+      m.side = THREE.DoubleSide;
+    }
     injectBake(m, this.shared, false);
     return m;
   }
