@@ -379,18 +379,37 @@ export const PROPS = {
 
   // ---- yard ----
   lampPost(b, p) {
-    // a sodium lamp on a tall pole with an outreach arm; the light pools orange on the asphalt
+    // a deck floodlight mast with an outreach arm: a hard, cold white pooling on the plate
     const h = p.h || 6.5;
-    b.cyl('steelDark', 0, 0, 0, 0.09, 0.25, { segs: 8 });
-    b.cyl('metalGrey', 0, 0.25, 0, 0.06, h - 0.25, { r1: 0.045, segs: 8, noCap: true });
+    b.cyl('steelDark', 0, 0, 0, 0.12, 0.3, { segs: 8 });
+    b.cyl('metalGrey', 0, 0.3, 0, 0.07, h - 0.3, { r1: 0.05, segs: 8, noCap: true });
+    for (let y = 1.2; y < h - 0.5; y += 1.6) b.box('hazard', 0, y, 0, 0.15, 0.12, 0.15);
     b.box('metalGrey', 0, h - 0.05, 0.6, 0.05, 0.05, 1.2);
-    b.box('steelDark', 0, h - 0.12, 1.25, 0.24, 0.14, 0.55);
-    b.box('lamp', 0, h - 0.125, 1.25, 0.18, 0.005, 0.46, { glow: p.dead ? [0.05, 0.03, 0.01] : [2.6, 1.2, 0.3] });
+    b.box('steelDark', 0, h - 0.14, 1.25, 0.34, 0.16, 0.46);
+    b.box('lamp', 0, h - 0.145, 1.25, 0.28, 0.005, 0.38, { glow: p.dead ? [0.03, 0.03, 0.035] : [2.3, 2.5, 2.8] });
     if (!p.dead) {
-      b.light({ x: 0, y: h - 0.3, z: 1.25, type: 'spotDown', color: [1.0, 0.55, 0.18], power: p.power ?? 9, range: 16 });
-      b.light({ x: 0, y: h - 0.4, z: 1.25, color: [1.0, 0.55, 0.2], power: 1.2, range: 14 });
+      b.light({ x: 0, y: h - 0.3, z: 1.25, type: 'spotDown', color: [0.86, 0.93, 1.0], power: p.power ?? 9, range: 16 });
+      b.light({ x: 0, y: h - 0.4, z: 1.25, color: [0.8, 0.9, 1.0], power: 1.2, range: 14 });
     }
-    b.collideBox(0, 0, 0.2, 0.2, h);
+    // a red obstruction lamp on the top: masts stick up into the approach
+    b.box('lamp', 0, h + 0.02, 0, 0.06, 0.06, 0.06, { glow: [2.4, 0.12, 0.06] });
+    b.collideBox(0, 0, 0.24, 0.24, h);
+  },
+
+  porthole(b, p) {
+    // a round port in a bulkhead, origin on the wall: a bolted flange, a deep rim, old glass
+    const y = p.y || 1.5;
+    const r = p.r || 0.24;
+    b.cyl('metalGrey', 0, y, 0, r + 0.1, 0.03, { segs: 18, rx: true });
+    b.cyl('viewport', 0, y, 0.031, r, 0.002, { segs: 18, rx: true });
+    b.cyl('chrome', 0, y, 0.03, r + 0.03, 0.08, { segs: 18, rx: true, noCap: true });
+    b.cyl('steelDark', 0, y, 0.03, r + 0.1, 0.012, { r1: r + 0.03, segs: 18, rx: true, noCap: true });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + 0.2;
+      b.box('chrome', Math.cos(a) * (r + 0.065), y + Math.sin(a) * (r + 0.065) - 0.012, 0.03, 0.024, 0.024, 0.012);
+    }
+    // a little planet-shine through it
+    b.light({ x: 0, y: y - 0.2, z: 0.7, color: [0.55, 0.68, 1.0], power: 0.05, range: 2.2 });
   },
 
   wallPack(b, p) {

@@ -1,5 +1,5 @@
-// SERVICE CORRIDOR: the back-of-house runs that join everything up. Painted block, lino, bare
-// battens, lockers, a vending machine picked half clean, a staff room off to one side.
+// SERVICE GANGWAY: the crew's runs that join everything up. Painted bulkhead panels, studded
+// rubber deck, bare battens, lockers, a vending machine picked half clean, a crew mess off to one side.
 
 import { rngFor } from '../../core/rng.js';
 import { TILE } from '../constants.js';
@@ -7,7 +7,7 @@ import { mainAxis, axisFrame, corridorWallSlots, spaced } from '../kit.js';
 
 export default {
   id: 'corridor',
-  name: 'Service Corridor',
+  name: 'Service Gangway',
   weight: 1,
 
   layout(seed, plan) {

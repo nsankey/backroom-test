@@ -1,4 +1,4 @@
-// RACKING: a tall bay of teal pallet racking under a steel deck. Back-to-back runs with wide
+// CARGO HOLD: a tall hold of teal pallet racking between the hull frames, under the deck above. Back-to-back runs with wide
 // aisles between them and a perimeter aisle that keeps every door connected. High-bays hang
 // over the aisles; the tops of the racks disappear into the dark.
 
@@ -7,7 +7,7 @@ import { clearOfDoors } from '../kit.js';
 
 export default {
   id: 'racking',
-  name: 'Racking',
+  name: 'Cargo Hold',
   weight: 1,
 
   layout(seed, plan) {

@@ -1,4 +1,4 @@
-// THE TYPING POOL: grey carpet tile, cream walls, a suspended ceiling, clusters of desks behind
+// THE TYPING POOL: grey carpet tile, cream laminate wall board, a perforated deckhead, clusters of desks behind
 // low fabric screens. Typewriters with a sheet still in them. A supervisor's glass box in a corner.
 
 import { rngFor } from '../../core/rng.js';

@@ -45,10 +45,14 @@ export const HelmetCamShader = {
       vec2 px = 1.0 / uRes;
       vec3 c = texture2D(tDiffuse, uv).rgb;
       if (soft < 0.02) return c;
-      vec2 o = px * (1.0 + soft * 3.0);
+      // eight taps on two rings, so a point of light (a star) smears into a blur rather than
+      // breaking into four separate dots
+      vec2 o = px * (0.8 + soft * 1.6);
       vec3 b = texture2D(tDiffuse, uv + vec2(o.x, o.y)).rgb + texture2D(tDiffuse, uv + vec2(-o.x, o.y)).rgb
-             + texture2D(tDiffuse, uv + vec2(o.x, -o.y)).rgb + texture2D(tDiffuse, uv + vec2(-o.x, -o.y)).rgb;
-      return mix(c, b * 0.25, clamp(soft, 0.0, 1.0));
+             + texture2D(tDiffuse, uv + vec2(o.x, -o.y)).rgb + texture2D(tDiffuse, uv + vec2(-o.x, -o.y)).rgb
+             + texture2D(tDiffuse, uv + vec2(o.x * 1.6, 0.0)).rgb + texture2D(tDiffuse, uv + vec2(-o.x * 1.6, 0.0)).rgb
+             + texture2D(tDiffuse, uv + vec2(0.0, o.y * 1.6)).rgb + texture2D(tDiffuse, uv + vec2(0.0, -o.y * 1.6)).rgb;
+      return mix(c, (b * 0.125 + c) * 0.5, clamp(soft * 1.4, 0.0, 1.0));
     }
 
     void main() {

@@ -95,66 +95,63 @@ function streaks(ctx, rng, w, h, count, col, maxLen = 1) {
 const GEN = {
   // ---- floors ----
   sealedConcrete(rng) {
-    // power-floated warehouse slab: swirl marks, a sealer sheen that has worn into paths,
-    // and a saw-cut joint along two edges (the texture spans 4 m, so joints fall every 4 m)
+    // cargo deck plate (the old name stuck): 2 x 1 m plates in a grey-green deck paint, worn
+    // through to bright steel down the lanes the loaders ran, tie-down cups at the corners
+    // (the texture spans 4 m)
     const [c, x] = canvas();
-    x.fillStyle = rgb(126, 124, 116);
-    x.fillRect(0, 0, S, S);
-    blotches(x, S, S, rng, 26, 'rgba(96,94,86,A)', 30, 120, 0.25);
-    blotches(x, S, S, rng, 16, 'rgba(160,158,150,A)', 30, 90, 0.18);
-    for (let k = 0; k < 70; k++) {
-      x.strokeStyle = rgb(150, 148, 140, rng.float(0.05, 0.14));
-      x.lineWidth = rng.float(2, 6);
-      x.beginPath();
-      x.arc(rng.float(0, S), rng.float(0, S), rng.float(20, 70), rng.float(0, 6), rng.float(0, 6) + rng.float(0.5, 2));
-      x.stroke();
-    }
-    // tyre tracks from pallet trucks
+    plates(x, S, S, rng, [98, 104, 98], 2, 4, { seam: 2, rivet: 0, vary: 0.04, lip: 0.2 });
+    blotches(x, S, S, rng, 22, 'rgba(66,66,60,A)', 30, 110, 0.25);
+    // loader lanes worn to the metal
     for (let k = 0; k < 4; k++) {
-      x.strokeStyle = rgb(70, 68, 62, rng.float(0.08, 0.16));
-      x.lineWidth = rng.float(8, 14);
+      x.strokeStyle = rgb(150, 150, 144, rng.float(0.1, 0.2));
+      x.lineWidth = rng.float(10, 18);
       x.beginPath();
       const y0 = rng.float(0, S);
       x.moveTo(-10, y0);
-      x.bezierCurveTo(S * 0.3, y0 + rng.float(-80, 80), S * 0.7, y0 + rng.float(-80, 80), S + 10, y0);
+      x.bezierCurveTo(S * 0.3, y0 + rng.float(-60, 60), S * 0.7, y0 + rng.float(-60, 60), S + 10, y0);
       x.stroke();
     }
-    for (let k = 0; k < 3; k++) crack(x, rng, S, S, 'rgba(50,48,44,0.45)');
-    x.fillStyle = rgb(60, 58, 54, 0.8);
-    x.fillRect(0, 0, S, 3);
-    x.fillRect(0, 0, 3, S);
-    specks(x, S, S, rng, 900, ['rgba(80,78,72,0.4)', 'rgba(170,168,160,0.35)']);
-    noise(x, S, S, rng, 0.07);
+    for (let r = 0; r < 4; r++)
+      for (let k = 0; k < 2; k++) {
+        const px = k * (S / 2) + 14;
+        const py = r * (S / 4) + 14;
+        x.fillStyle = 'rgba(30,30,28,0.75)';
+        x.beginPath();
+        x.arc(px, py, 6, 0, Math.PI * 2);
+        x.fill();
+        x.strokeStyle = 'rgba(170,170,160,0.45)';
+        x.lineWidth = 1.5;
+        x.stroke();
+      }
+    specks(x, S, S, rng, 1400, ['rgba(60,62,58,0.4)', 'rgba(170,172,166,0.3)']);
+    noise(x, S, S, rng, 0.06);
     return c;
   },
   concrete(rng) {
+    // walkway plate: smaller plates, a grey deck paint gone patchy
     const [c, x] = canvas();
-    x.fillStyle = rgb(124, 122, 114);
-    x.fillRect(0, 0, S, S);
-    blotches(x, S, S, rng, 30, 'rgba(88,86,78,A)', 20, 90, 0.25);
-    blotches(x, S, S, rng, 20, 'rgba(168,166,158,A)', 20, 70, 0.2);
-    specks(x, S, S, rng, 1600, ['rgba(70,68,62,0.5)', 'rgba(180,178,170,0.4)']);
-    noise(x, S, S, rng, 0.12);
+    plates(x, S, S, rng, [104, 106, 104], 2, 2, { seam: 2, rivet: 24, vary: 0.05 });
+    blotches(x, S, S, rng, 24, 'rgba(70,70,66,A)', 20, 90, 0.25);
+    blotches(x, S, S, rng, 14, 'rgba(160,160,154,A)', 20, 60, 0.15);
+    specks(x, S, S, rng, 1600, ['rgba(70,68,62,0.4)', 'rgba(180,178,170,0.3)']);
+    noise(x, S, S, rng, 0.08);
     return c;
   },
   asphalt(rng) {
-    // the yard: worn asphalt with aggregate showing, oil drips, patched cracks
+    // the landing pad: gunmetal deck plate under an anti-slip grit, burnt in rings where
+    // engines have lit on it, the pad's paint flaking (the texture spans 3 m)
     const [c, x] = canvas();
-    x.fillStyle = rgb(48, 48, 50);
-    x.fillRect(0, 0, S, S);
-    specks(x, S, S, rng, 9000, ['rgba(90,88,86,0.55)', 'rgba(30,30,32,0.6)', 'rgba(120,116,108,0.35)'], 0.4, 1.4);
-    blotches(x, S, S, rng, 8, 'rgba(14,12,12,A)', 18, 70, 0.55);
-    blotches(x, S, S, rng, 10, 'rgba(96,94,90,A)', 40, 120, 0.15);
-    for (let k = 0; k < 6; k++) crack(x, rng, S, S, 'rgba(18,18,18,0.7)');
-    // a tar-sealed crack, wider and glossy-black
-    x.strokeStyle = rgb(16, 16, 18, 0.85);
-    x.lineWidth = 5;
-    x.beginPath();
-    let px = rng.float(0, S);
-    x.moveTo(px, 0);
-    for (let y = 0; y <= S; y += 32) x.lineTo((px += rng.float(-14, 14)), y);
-    x.stroke();
-    noise(x, S, S, rng, 0.08);
+    plates(x, S, S, rng, [62, 64, 66], 2, 2, { seam: 3, rivet: 26, vary: 0.06, lip: 0.25 });
+    specks(x, S, S, rng, 9000, ['rgba(96,96,94,0.45)', 'rgba(30,30,32,0.5)', 'rgba(120,118,112,0.25)'], 0.4, 1.3);
+    blotches(x, S, S, rng, 7, 'rgba(18,14,12,A)', 30, 110, 0.5);
+    blotches(x, S, S, rng, 4, 'rgba(70,50,36,A)', 20, 60, 0.25);
+    blotches(x, S, S, rng, 8, 'rgba(110,112,116,A)', 40, 120, 0.12);
+    // flakes of the old pad markings
+    for (let k = 0; k < 14; k++) {
+      x.fillStyle = rng.chance(0.6) ? rgb(176, 150, 60, rng.float(0.15, 0.35)) : rgb(190, 190, 184, rng.float(0.12, 0.3));
+      x.fillRect(rng.float(0, S), rng.float(0, S), rng.float(6, 30), rng.float(3, 10));
+    }
+    noise(x, S, S, rng, 0.07);
     return c;
   },
   freezerFloor(rng) {
@@ -198,30 +195,35 @@ const GEN = {
     return c;
   },
   lino(rng) {
-    // marbled sheet linoleum in a brown-ochre, scuffed
+    // studded rubber deck covering in a dark green-grey, laid in sheets, worn smooth in paths
+    // (spans 2.5 m; a stud every ~8 cm)
     const [c, x] = canvas();
-    x.fillStyle = rgb(122, 98, 66);
+    x.fillStyle = rgb(66, 74, 70);
     x.fillRect(0, 0, S, S);
-    for (let k = 0; k < 120; k++) {
-      x.strokeStyle = rng.chance(0.5) ? rgb(150, 124, 86, 0.3) : rgb(90, 70, 44, 0.3);
-      x.lineWidth = rng.float(2, 8);
+    const st = 16;
+    for (let py = st / 2; py < S; py += st)
+      for (let px = st / 2; px < S; px += st) {
+        x.fillStyle = 'rgba(20,24,22,0.45)';
+        x.beginPath();
+        x.arc(px + 0.8, py + 0.8, 4.2, 0, Math.PI * 2);
+        x.fill();
+        x.fillStyle = 'rgba(112,122,116,0.5)';
+        x.beginPath();
+        x.arc(px - 0.4, py - 0.4, 3.6, 0, Math.PI * 2);
+        x.fill();
+      }
+    // a worn path where the studs are flattened, and dust in the low places
+    for (let k = 0; k < 3; k++) {
+      x.strokeStyle = rgb(72, 80, 76, 0.55);
+      x.lineWidth = rng.float(40, 70);
       x.beginPath();
       const y0 = rng.float(0, S);
       x.moveTo(-20, y0);
-      x.bezierCurveTo(S * 0.3, y0 + rng.float(-30, 30), S * 0.6, y0 + rng.float(-30, 30), S + 20, y0 + rng.float(-20, 20));
+      x.bezierCurveTo(S * 0.3, y0 + rng.float(-40, 40), S * 0.6, y0 + rng.float(-40, 40), S + 20, y0);
       x.stroke();
     }
-    for (let k = 0; k < 50; k++) {
-      x.strokeStyle = rgb(30, 24, 18, rng.float(0.1, 0.3));
-      x.lineWidth = 1.2;
-      const px = rng.float(0, S);
-      const py = rng.float(0, S);
-      x.beginPath();
-      x.moveTo(px, py);
-      x.lineTo(px + rng.float(-30, 30), py + rng.float(-6, 6));
-      x.stroke();
-    }
-    x.fillStyle = 'rgba(30,24,16,0.5)';
+    blotches(x, S, S, rng, 12, 'rgba(40,36,28,A)', 20, 80, 0.25);
+    x.fillStyle = 'rgba(20,22,20,0.7)';
     x.fillRect(0, 0, S, 2);
     noise(x, S, S, rng, 0.05);
     return c;
@@ -305,36 +307,84 @@ const GEN = {
     return c;
   },
   corrugated(rng) {
-    // profiled steel sheet, ribs every 0.2 m (texture spans 1.6 m), weathered with rust runs
+    // a hold's bare hull: plating between deep frames every 0.8 m and a stringer across, the
+    // frames' shadows and highlights painted in, stained where coolant ran (spans 1.6 m)
     const [c, x] = canvas();
-    const base = [86, 104, 100];
-    for (let px = 0; px < S; px++) {
-      const t = (px % 64) / 64;
-      const shade = 0.72 + 0.4 * Math.max(0, Math.sin(t * Math.PI * 2)) + (t > 0.45 && t < 0.55 ? -0.15 : 0);
-      x.fillStyle = rgb(base[0] * shade, base[1] * shade, base[2] * shade);
-      x.fillRect(px, 0, 1, S);
+    const base = [84, 96, 94];
+    plates(x, S, S, rng, base, 2, 3, { seam: 2, rivet: 20, vary: 0.06 });
+    for (const fx of [0, S / 2]) {
+      for (let k = 0; k < 40; k++) {
+        const t = k / 40;
+        const shade = 0.5 + 0.7 * Math.sin(t * Math.PI);
+        x.fillStyle = rgb(base[0] * shade, base[1] * shade, base[2] * shade);
+        x.fillRect(fx + k, 0, 1, S);
+      }
+      x.fillStyle = 'rgba(10,12,12,0.35)';
+      x.fillRect(fx + 40, 0, 14, S);
     }
-    streaks(x, rng, S, S, 30, 'rgba(120,64,30,A)', 0.8);
+    x.fillStyle = rgb(base[0] * 1.1, base[1] * 1.1, base[2] * 1.1);
+    x.fillRect(0, S * 0.62, S, 12);
+    x.fillStyle = 'rgba(10,12,12,0.4)';
+    x.fillRect(0, S * 0.62 + 12, S, 8);
+    streaks(x, rng, S, S, 24, 'rgba(96,76,50,A)', 0.8);
     blotches(x, S, S, rng, 10, 'rgba(40,40,36,A)', 30, 100, 0.25);
-    noise(x, S, S, rng, 0.07);
+    noise(x, S, S, rng, 0.06);
     return c;
   },
   facade(rng) {
-    // precast concrete panels with rain streaks below every horizontal joint (spans 3 m)
+    // outer hull plate (spans 3 m): a patchwork of 1.5 m plates in a dozen greys where they
+    // were patched over the years, scorched and pitted by dust, stencils half gone
     const [c, x] = canvas();
-    x.fillStyle = rgb(118, 116, 108);
-    x.fillRect(0, 0, S, S);
-    specks(x, S, S, rng, 3000, ['rgba(80,78,72,0.5)', 'rgba(160,156,148,0.4)']);
-    streaks(x, rng, S, S, 60, 'rgba(40,38,34,A)', 0.9);
-    x.fillStyle = 'rgba(30,30,28,0.7)';
-    x.fillRect(0, 0, S, 4);
-    x.fillRect(0, 0, 4, S);
-    blotches(x, S, S, rng, 8, 'rgba(60,70,40,A)', 30, 90, 0.2);
-    noise(x, S, S, rng, 0.08);
+    plates(x, S, S, rng, [112, 114, 112], 2, 4, { seam: 4, rivet: 16, vary: 0.08, lip: 0.5 });
+    // brushed grain along the plates: it is metal, not stone
+    for (let k = 0; k < 500; k++) {
+      x.fillStyle = rng.chance(0.5) ? 'rgba(200,202,200,0.06)' : 'rgba(40,40,40,0.06)';
+      x.fillRect(rng.float(0, S), rng.float(0, S), rng.float(30, 140), 1);
+    }
+    // patch plates: smaller squares of a different grey
+    for (let k = 0; k < 4; k++) {
+      const v = rng.float(0.78, 1.15);
+      const px = rng.float(10, S - 120);
+      const py = rng.float(10, S - 120);
+      const w = rng.float(50, 110);
+      const h = rng.float(40, 100);
+      x.fillStyle = rgb(112 * v, 114 * v, 116 * v);
+      x.fillRect(px, py, w, h);
+      x.strokeStyle = 'rgba(40,40,40,0.6)';
+      x.lineWidth = 2;
+      x.strokeRect(px, py, w, h);
+    }
+    specks(x, S, S, rng, 900, ['rgba(70,70,68,0.4)', 'rgba(170,170,166,0.3)']);
+    streaks(x, rng, S, S, 16, 'rgba(30,28,26,A)', 0.5);
+    blotches(x, S, S, rng, 5, 'rgba(20,18,16,A)', 30, 100, 0.25);
+    // stencil marks: bars and blocks of white and safety yellow, worn
+    for (let k = 0; k < 3; k++) {
+      x.fillStyle = rng.chance(0.5) ? 'rgba(210,206,190,0.35)' : 'rgba(200,160,50,0.35)';
+      const px = rng.float(20, S - 100);
+      const py = rng.float(20, S - 40);
+      for (let b = 0; b < 4; b++) x.fillRect(px + b * 18, py, 12, 16);
+    }
+    noise(x, S, S, rng, 0.07);
     return c;
   },
   plasterOffice(rng) {
-    return paint(rng, [192, 186, 166]);
+    // laminated wall board in a cream gone yellow: panels 1 m wide, screwed top and bottom
+    const c = paint(rng, [188, 182, 160]);
+    const x = c.getContext('2d');
+    for (const px of [0, S / 2]) {
+      x.fillStyle = 'rgba(70,64,50,0.55)';
+      x.fillRect(px, 0, 2, S);
+      x.fillStyle = 'rgba(255,250,235,0.35)';
+      x.fillRect(px + 2, 0, 1, S);
+      for (const py of [12, S / 2 + 12]) {
+        x.fillStyle = 'rgba(60,56,48,0.6)';
+        x.fillRect(px + 8, py, 3, 3);
+        x.fillRect(px + S / 2 - 10, py, 3, 3);
+      }
+    }
+    x.fillStyle = 'rgba(90,84,70,0.35)';
+    x.fillRect(0, S / 2, S, 2);
+    return c;
   },
   partition(rng) {
     // fabric-covered screen panels in a grey-blue weave
@@ -374,11 +424,12 @@ const GEN = {
     return c;
   },
   vanPaint(rng) {
-    // armoured-van paint: a faded bottle green, scuffed to primer at the edges, dusty low down
+    // the Strongbox's hull: the firm's bottle green, faded, on plates with sunk seams and
+    // rivets, scuffed to primer where the docking collars rub (spans 1.5 m)
     const [c, x] = canvas(256, 256);
-    x.fillStyle = rgb(92, 112, 98);
-    x.fillRect(0, 0, 256, 256);
+    plates(x, 256, 256, rng, [92, 112, 98], 2, 1, { seam: 2, rivet: 13, vary: 0.04, lip: 0.25 });
     blotches(x, 256, 256, rng, 12, 'rgba(120,116,96,A)', 6, 30, 0.25);
+    blotches(x, 256, 256, rng, 5, 'rgba(30,28,24,A)', 10, 40, 0.3);
     for (let k = 0; k < 40; k++) {
       x.strokeStyle = rgb(150, 150, 140, rng.float(0.05, 0.2));
       x.lineWidth = 1;
@@ -395,28 +446,31 @@ const GEN = {
 
   // ---- ceilings ----
   ceilTile(rng) {
-    // 2 x 2 suspended ceiling tiles of 0.6 m in a white grid; water stains, one tile missing a corner
+    // 2 x 2 perforated deckhead panels of 0.6 m in a steel grid: acoustic holes in rows, a
+    // brown bloom where something leaked through from the deck above
     const [c, x] = canvas();
-    x.fillStyle = rgb(196, 194, 182);
-    x.fillRect(0, 0, S, S);
-    for (let k = 0; k < 2600; k++) {
-      x.fillStyle = rgb(116, 114, 104, rng.float(0.25, 0.7));
-      x.beginPath();
-      x.arc(rng.float(0, S), rng.float(0, S), rng.float(0.6, 1.8), 0, Math.PI * 2);
-      x.fill();
-    }
-    blotches(x, S, S, rng, 3, 'rgba(150,120,60,A)', 20, 70, 0.35);
-    for (let k = 0; k < 2; k++) {
-      x.strokeStyle = rgb(140, 104, 50, 0.35);
-      x.lineWidth = 2;
-      x.beginPath();
-      x.arc(rng.float(40, 470), rng.float(40, 470), rng.float(18, 50), 0, Math.PI * 2);
-      x.stroke();
-    }
-    x.fillStyle = rgb(150, 150, 144);
+    for (let j = 0; j < 2; j++)
+      for (let i = 0; i < 2; i++) {
+        const v = rng.float(0.93, 1.05);
+        x.fillStyle = rgb(168 * v, 172 * v, 170 * v);
+        x.fillRect(i * 256, j * 256, 256, 256);
+      }
+    for (let py = 18; py < S; py += 11)
+      for (let px = 18; px < S; px += 11) {
+        if (px % 256 < 16 || py % 256 < 16 || px % 256 > 244 || py % 256 > 244) continue;
+        x.fillStyle = 'rgba(40,42,42,0.55)';
+        x.fillRect(px, py, 2.6, 2.6);
+      }
+    blotches(x, S, S, rng, 3, 'rgba(130,100,56,A)', 20, 70, 0.35);
+    x.fillStyle = rgb(92, 96, 96);
     for (const p of [0, 256]) {
-      x.fillRect(p, 0, 7, S);
-      x.fillRect(0, p, S, 7);
+      x.fillRect(p, 0, 8, S);
+      x.fillRect(0, p, S, 8);
+    }
+    x.fillStyle = 'rgba(200,204,200,0.35)';
+    for (const p of [0, 256]) {
+      x.fillRect(p + 8, 0, 1.5, S);
+      x.fillRect(0, p + 8, S, 1.5);
     }
     noise(x, S, S, rng, 0.05);
     return c;
@@ -687,26 +741,64 @@ function paint(rng, col, size = S) {
   return c;
 }
 
+/**
+ * Plating: a grid of plates (cols x rows over the whole texture), each a touch different in
+ * tone, with recessed seams (a dark line and a lit lip) and rivet rows along them.
+ * opts: { seam: px, rivet: spacing px or 0, vary: tone spread, lip }
+ */
+function plates(x, w, h, rng, col, cols, rows, opts = {}) {
+  const pw = w / cols;
+  const ph = h / rows;
+  const vary = opts.vary ?? 0.05;
+  for (let r = 0; r < rows; r++)
+    for (let k = 0; k < cols; k++) {
+      const v = 1 + rng.float(-vary, vary);
+      x.fillStyle = rgb(col[0] * v, col[1] * v, col[2] * v);
+      x.fillRect(k * pw, r * ph, pw, ph);
+    }
+  const seam = opts.seam ?? 3;
+  x.fillStyle = rgb(col[0] * 0.45, col[1] * 0.45, col[2] * 0.45, 0.85);
+  for (let k = 0; k < cols; k++) x.fillRect(k * pw, 0, seam, h);
+  for (let r = 0; r < rows; r++) x.fillRect(0, r * ph, w, seam);
+  x.fillStyle = rgb(Math.min(255, col[0] * 1.35), Math.min(255, col[1] * 1.35), Math.min(255, col[2] * 1.35), opts.lip ?? 0.35);
+  for (let k = 0; k < cols; k++) x.fillRect(k * pw + seam, 0, 1.5, h);
+  for (let r = 0; r < rows; r++) x.fillRect(0, r * ph + seam, w, 1.5);
+  const sp = opts.rivet ?? 0;
+  if (sp) {
+    const dot = (px, py) => {
+      x.fillStyle = rgb(col[0] * 0.5, col[1] * 0.5, col[2] * 0.5, 0.7);
+      x.beginPath();
+      x.arc(px, py, 2.2, 0, Math.PI * 2);
+      x.fill();
+      x.fillStyle = rgb(Math.min(255, col[0] * 1.5), Math.min(255, col[1] * 1.5), Math.min(255, col[2] * 1.5), 0.45);
+      x.fillRect(px - 1.4, py - 1.8, 1.6, 1);
+    };
+    for (let k = 0; k < cols; k++) for (let py = sp / 2; py < h; py += sp) dot(k * pw + seam + 7, py);
+    for (let r = 0; r < rows; r++) for (let px = sp / 2; px < w; px += sp) dot(px, r * ph + seam + 7);
+  }
+}
+
+/** Painted bulkhead panels (spans 1.6 m): a ship's inner walls, scuffed low down. */
 function block(rng, col, scuffs) {
   const [c, x] = canvas();
-  x.fillStyle = rgb(...col);
-  x.fillRect(0, 0, S, S);
-  const bw = S / 4;
-  const bh = S / 8;
-  for (let r = 0; r < 8; r++)
-    for (let k = -1; k < 5; k++) {
-      const v = rng.float(0.95, 1.04);
-      x.fillStyle = rgb(col[0] * v, col[1] * v, col[2] * v);
-      x.fillRect(k * bw + (r % 2 ? bw / 2 : 0) + 2, r * bh + 2, bw - 4, bh - 4);
-    }
-  x.strokeStyle = rgb(col[0] * 0.72, col[1] * 0.72, col[2] * 0.72, 0.8);
-  x.lineWidth = 3;
-  for (let r = 0; r < 8; r++)
-    for (let k = -1; k < 5; k++) x.strokeRect(k * bw + (r % 2 ? bw / 2 : 0), r * bh, bw, bh);
-  // pores in the block face
-  specks(x, S, S, rng, 2200, [rgb(col[0] * 0.75, col[1] * 0.75, col[2] * 0.75, 0.5)], 0.5, 1.5);
-  if (scuffs) blotches(x, S, S, rng, 10, 'rgba(70,64,50,A)', S / 20, S / 7, 0.16);
-  noise(x, S, S, rng, 0.05);
+  plates(x, S, S, rng, col, 2, 2, { seam: 3, rivet: 22, vary: 0.035 });
+  // a stiffener rib down one seam: shadow, face, highlight
+  x.fillStyle = rgb(col[0] * 0.55, col[1] * 0.55, col[2] * 0.55, 0.8);
+  x.fillRect(0, 0, 10, S);
+  x.fillStyle = rgb(col[0] * 0.92, col[1] * 0.92, col[2] * 0.92);
+  x.fillRect(10, 0, 18, S);
+  x.fillStyle = rgb(Math.min(255, col[0] * 1.2), Math.min(255, col[1] * 1.2), Math.min(255, col[2] * 1.2), 0.6);
+  x.fillRect(27, 0, 3, S);
+  // one faded stencil number, off-centre (more would show the tiling)
+  x.fillStyle = rgb(col[0] * 0.55, col[1] * 0.55, col[2] * 0.55, 0.4);
+  const px = rng.float(S * 0.6, S * 0.8);
+  const py = rng.float(S * 0.15, S * 0.35);
+  x.fillRect(px, py, 22, 8);
+  x.fillRect(px + 27, py, 12, 8);
+  specks(x, S, S, rng, 900, [rgb(col[0] * 0.75, col[1] * 0.75, col[2] * 0.75, 0.4)], 0.5, 1.2);
+  if (scuffs) blotches(x, S, S, rng, 10, 'rgba(60,58,50,A)', S / 20, S / 7, 0.16);
+  streaks(x, rng, S, S, 8, 'rgba(70,60,40,A)', 0.4);
+  noise(x, S, S, rng, 0.04);
   return c;
 }
 

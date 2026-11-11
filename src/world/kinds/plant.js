@@ -1,4 +1,4 @@
-// THE BOTTLING HALL: red quarry tile and teal block, a row of stainless vessels, a bottling
+// THE BOTTLING HALL: tread plate and teal bulkheads, a row of stainless vessels, a bottling
 // line with its last bottles still queued, overhead pipe runs and a control desk.
 
 import { rngFor } from '../../core/rng.js';
@@ -11,7 +11,7 @@ export default {
 
   layout(seed, plan) {
     const rng = rngFor(seed, 'layout');
-    const room = plan.zone({ name: 'plant', ceil: 6.4, floor: 'quarryTile', wall: 'paintBlockTeal', ceilMat: 'deckSteel' });
+    const room = plan.zone({ name: 'plant', ceil: 6.4, floor: 'diamondPlate', wall: 'paintBlockTeal', ceilMat: 'deckSteel' });
     plan.fill(1, 1, 30, 30, room);
     plan.ambient = [0.018, 0.02, 0.02];
     const alongX = rng.chance(0.5);

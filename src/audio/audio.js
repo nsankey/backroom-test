@@ -464,45 +464,49 @@ const SOUNDS = {
     noiseBurst(ae, out, t + 1.7, { type: 'lowpass', freq: 300, peak: 0.5, d: 0.2 });
   },
   horn(ae, out, t) {
-    // the Strongbox's air horn: two flat blasts, the second longer
-    for (const [t0, d] of [[0, 0.7], [1.0, 1.6]]) {
-      for (const f of [233, 277, 349]) {
-        const o = ae.ctx.createOscillator();
-        o.type = 'sawtooth';
-        o.frequency.value = f;
-        const fl = ae.ctx.createBiquadFilter();
-        fl.type = 'lowpass';
-        fl.frequency.value = 1400;
-        const g = ae.ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t + t0);
-        g.gain.linearRampToValueAtTime(0.06, t + t0 + 0.05);
-        g.gain.setValueAtTime(0.06, t + t0 + d);
-        g.gain.linearRampToValueAtTime(0.0001, t + t0 + d + 0.15);
-        o.connect(fl).connect(g).connect(out);
-        o.start(t + t0);
-        o.stop(t + t0 + d + 0.2);
-      }
+    // the Strongbox's undocking klaxon: a two-tone whoop through the hull speakers, three times
+    for (let k = 0; k < 3; k++) {
+      const t0 = t + k * 0.85;
+      const o = ae.ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(330, t0);
+      o.frequency.exponentialRampToValueAtTime(620, t0 + 0.55);
+      const fl = ae.ctx.createBiquadFilter();
+      fl.type = 'bandpass';
+      fl.frequency.value = 900;
+      fl.Q.value = 0.8;
+      const g = ae.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.07, t0 + 0.04);
+      g.gain.setValueAtTime(0.07, t0 + 0.55);
+      g.gain.linearRampToValueAtTime(0.0001, t0 + 0.65);
+      o.connect(fl).connect(g).connect(out);
+      o.start(t0);
+      o.stop(t0 + 0.7);
     }
   },
   engine(ae, out, t) {
-    // a diesel turning over and pulling away, heard from inside the box
+    // the docking clamps letting go, then the main drive lighting: a deep roar felt through
+    // the deck more than heard, rising as she pulls away
+    for (let k = 0; k < 4; k++) noiseBurst(ae, out, t + k * 0.13, { type: 'lowpass', freq: 500, peak: 0.4, d: 0.09 });
     const o = ae.ctx.createOscillator();
     o.type = 'sawtooth';
-    o.frequency.setValueAtTime(28, t);
-    o.frequency.linearRampToValueAtTime(42, t + 1.2);
-    o.frequency.linearRampToValueAtTime(36, t + 3.5);
+    o.frequency.setValueAtTime(24, t + 0.7);
+    o.frequency.linearRampToValueAtTime(38, t + 2.2);
+    o.frequency.linearRampToValueAtTime(33, t + 3.8);
     const f = ae.ctx.createBiquadFilter();
     f.type = 'lowpass';
-    f.frequency.value = 180;
+    f.frequency.value = 150;
     const g = ae.ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.35, t + 0.6);
-    g.gain.setValueAtTime(0.35, t + 2.6);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.0);
+    g.gain.setValueAtTime(0.0001, t + 0.6);
+    g.gain.linearRampToValueAtTime(0.32, t + 1.4);
+    g.gain.setValueAtTime(0.32, t + 2.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
     o.connect(f).connect(g).connect(out);
-    o.start(t);
-    o.stop(t + 4.1);
-    noiseBurst(ae, out, t, { type: 'lowpass', freq: 160, peak: 0.25, a: 0.4, d: 3.4 });
+    o.start(t + 0.6);
+    o.stop(t + 4.3);
+    noiseBurst(ae, out, t + 0.6, { type: 'lowpass', freq: 420, peak: 0.3, a: 0.7, d: 3.2 });
+    noiseBurst(ae, out, t + 0.7, { freq: 1600, q: 0.7, peak: 0.05, a: 0.9, d: 2.4 });
   },
   breaker(ae, out, t) {
     // somewhere a breaker trips: a flat bang and the hum under it dropping away
@@ -668,18 +672,26 @@ const SOUNDS = {
   shutterRattle(ae, out, t) {
     for (let k = 0; k < 12; k++) noiseBurst(ae, out, t + k * 0.05 + ae.rng.float(0, 0.02), { freq: ae.rng.float(600, 1400), q: 3, peak: 0.08, d: 0.04 });
   },
-  dogFar(ae, out, t) {
-    // a dog a long way off: two short barks
-    for (let k = 0; k < 2; k++) {
-      sweep(ae, out, t + k * 0.42, 520, 330, 0.14, 'sawtooth', 0.04, 0.01);
-      noiseBurst(ae, out, t + k * 0.42, { freq: 900, q: 2, peak: 0.05, d: 0.12 });
+  // ---- the docking deck: a big cold hull, heard through your boots ----
+  hullGroan(ae, out, t) {
+    // the derelict's frame taking the strain of the docked ship: a slow, bending metal moan
+    const f0 = ae.rng.float(55, 85);
+    sweep(ae, out, t, f0, f0 * ae.rng.float(0.7, 0.85), 2.6, 'sawtooth', 0.03, 0.8);
+    sweep(ae, out, t + 0.1, f0 * 2.03, f0 * 1.6, 2.2, 'triangle', 0.012, 0.6);
+    noiseBurst(ae, out, t + 2.3, { type: 'lowpass', freq: 260, peak: 0.12, d: 0.4 });
+  },
+  hullTick(ae, out, t) {
+    // plating ticking as it gives up heat to the dark: dry, uneven, now here, now there
+    for (let k = 0; k < 5; k++) {
+      const dt = ae.rng.float(0, 1.6);
+      noiseBurst(ae, out, t + dt, { freq: ae.rng.float(1800, 3200), q: 7, peak: 0.06, d: 0.02 });
+      tone(ae, out, t + dt, ae.rng.float(700, 1100), 'sine', 0.012, 0.001, 0.12);
     }
   },
-  traffic(ae, out, t) {
-    noiseBurst(ae, out, t, { type: 'lowpass', freq: 350, peak: 0.1, a: 2.2, d: 3.5 });
-  },
-  windGust(ae, out, t) {
-    noiseBurst(ae, out, t, { freq: 500, q: 0.6, peak: 0.08, a: 1.4, d: 2.4 });
+  fieldFlutter(ae, out, t) {
+    // the pad's air curtain catching: a soft rush that wavers and settles
+    noiseBurst(ae, out, t, { freq: 700, q: 0.5, peak: 0.05, a: 1.2, d: 2.2 });
+    tone(ae, out, t + 0.4, 118, 'sine', 0.02, 0.6, 1.4);
   },
 };
 

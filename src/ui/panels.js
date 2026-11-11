@@ -1,4 +1,4 @@
-// Full-screen paperwork, all on Grisholm's amber terminal: the van terminal (writs, ledger), the
+// Full-screen paperwork, all on Grisholm's amber terminal: the ship's terminal (writs, ledger), the
 // site plan, the night's manifest, the termination notice and options. Plain DOM. Panels never
 // change game state themselves: they call back with intents.
 
@@ -16,28 +16,28 @@ function head(title, sub, close = true) {
   return `<div class="foot" style="margin:0"><div><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div></div>${close ? '<button data-close>Close [Esc]</button>' : ''}</div>`;
 }
 
-// ---- the van terminal -------------------------------------------------------------------------
+// ---- the ship's terminal ----------------------------------------------------------------------
 
-/** The firm's standing notices: each thing in the buildings, its tell, and what to do. */
+/** The firm's standing notices: each thing aboard the derelicts, its tell, and what to do. */
 const NOTICES = [
   {
     title: 'NOTICE 14 · QUIET HOURS',
-    where: 'ALL SITES',
+    where: 'ALL CRAFT',
     text: 'A humming like a struck tuning fork means the night quiet-keeper is on its rounds. It is blind and hears very well. It goes to where it heard something and listens; if it hears you again close by it whistles and comes at once. Crouch, keep still, set things down gently. A noise made elsewhere will draw it off.',
   },
   {
     title: 'NOTICE 22 · STOCK UNDER COUNT',
-    where: 'ALL SITES',
+    where: 'ALL CRAFT',
     text: 'Stock found piled on a chalked floor is still under count by the clerk who stands over it. You will hear the counter click. It counts every twenty seconds and pursues any shortfall until the item is set down again. It counts pieces, not value.',
   },
   {
     title: 'NOTICE 31 · LIGHTING FAILURES',
-    where: 'AFTER MIDNIGHT',
+    where: 'AFTER MIDNIGHT, SHIP TIME',
     text: 'Where tubes fail in a ring and the ears feel pressure, keep under working light and keep moving toward the Strongbox. In darkness it comes quickly; into light, only slowly, and only by putting the light out.',
   },
   {
     title: 'NOTICE 3 · NO WORKING ALONE',
-    where: 'ALL SITES',
+    where: 'ALL CRAFT',
     text: 'Receivers will work within sight of one another. A receiver who has been on their own too long may hear whistling, and the helmet counter may read PERSONS 2. Do not stop. Do not wait for it. Rejoin the crew or return to the Strongbox.',
   },
 ];
@@ -51,12 +51,12 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
   let body = '';
   if (tab === 'writs') {
     body =
-      `<p class="muted">Tonight's writs. Choose one, then pull the governor by the door to drive out. The door unlocks at 21:00 and the Strongbox leaves at 04:00, with or without you.</p>` +
+      `<p class="muted">Tonight's writs: derelict Halvard craft the court has handed to the firm. Choose one, then pull the governor by the door to fly out. The Strongbox docks and the door unlocks at 21:00 ship time; at 04:00 the governor undocks her and flies her home, with or without you.</p>` +
       SITE_LIST.map((site) => {
         const n = (run.visits[site.id] || 0) + 1;
         return `<div class="writ${site.id === run.siteId ? ' on' : ''}" data-writ="${site.id}">
           <div class="h"><span>${esc(site.writ)} &middot; ${esc(site.name.toUpperCase())}</span><span>HAZARD ${HAZARD[site.hazard]}</span></div>
-          <div class="b">${esc(site.place)}. ${esc(site.blurb)} Visit ${n}. ${site.cells[0]}-${site.cells[1]} bays.</div></div>`;
+          <div class="b">${esc(site.place)}. ${esc(site.blurb)} Boarding ${n}. ${site.cells[0]}-${site.cells[1]} sections.</div></div>`;
       }).join('');
   } else if (tab === 'ledger') {
     const left = run.instalment.due - run.night + 1;
@@ -70,11 +70,11 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
       <div><div class="muted">STILL OWED</div><div class="big ${run.ledger >= run.instalment.target ? 'good' : ''}">${fmtH(Math.max(0, run.instalment.target - run.ledger))}</div></div></div>
       ${tonight}
       <table><tr><th>NIGHT</th><th>WRIT</th><th class="v">BANKED</th><th class="v">FEES</th></tr>${rows || '<tr><td colspan="4" class="muted">No nights worked yet.</td></tr>'}</table>
-      <p class="muted">Salvage is valued by the strongroom when it goes down the night safe. Anything still aboard at departure is banked automatically. Overtime after 03:00 is charged at ħ5 per ten minutes.</p>`;
+      <p class="muted">Salvage is valued by the strongroom when it goes down the night safe. Anything still aboard the Strongbox when she undocks is banked automatically. Overtime after 03:00 is charged at ħ5 per ten minutes.</p>`;
   } else if (tab === 'stores') {
     const crew = Object.keys(s.players).length;
     body =
-      `<p class="muted">Requisition from the firm's stores, charged to your ledger. Tools wait on the starboard rack in the van; whatever you leave in a building is written off. One of each per receiver.</p>` +
+      `<p class="muted">Requisition from the firm's stores, charged to your ledger. Tools wait on the starboard rack in the hold; whatever you leave aboard a derelict is written off. One of each per receiver.</p>` +
       TOOL_LIST.map((t) => {
         const d = ITEMS[t];
         const owned = run.tools.filter((x) => x === t).length;
@@ -85,14 +85,14 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
       }).join('');
   } else if (tab === 'notices') {
     body =
-      `<p class="muted">Standing notices to receivers on Halvard premises. Read before every shift. The firm accepts no liability for receivers who did not.</p>` +
+      `<p class="muted">Standing notices to receivers aboard Halvard craft. Read before every shift. The firm accepts no liability for receivers who did not.</p>` +
       NOTICES.map((n) => `<div class="writ"><div class="h"><span>${esc(n.title)}</span><span>${esc(n.where)}</span></div><div class="b">${esc(n.text)}</div></div>`).join('');
   } else if (tab === 'site') {
     const site = SITES[s.site.siteId];
     const left = s.items.filter((i) => !i.holder).length;
     body = `<p>${esc(site.writ)} &middot; ${esc(site.name)}, ${esc(site.place)}</p><p class="muted">${esc(site.blurb)}</p>
-      <p>Time now ${fmtClock(game.minutes)}. Facility power ${Math.round(game.world.cells.get('0,-1')?.uniforms.uDim.value * 100 || 100)}% and falling.</p>
-      <p class="muted">${left} items of salvage still in the building, by the inventory.</p>`;
+      <p>Time now ${fmtClock(game.minutes)}. The derelict's reserve power ${Math.round(game.world.cells.get('0,-1')?.uniforms.uDim.value * 100 || 100)}% and falling.</p>
+      <p class="muted">${left} items of salvage still aboard, by the inventory.</p>`;
   }
   el.innerHTML = `<div class="term">${head('GRISHOLM & DAUGHTERS · FIELD TERMINAL', `STRONGBOX ${game.hud().crew} · NIGHT ${run.night}`)}<div class="tabs">${tabs}</div>${body}</div>`;
   for (const b of el.querySelectorAll('[data-tab]')) b.addEventListener('click', () => terminalPanel(el, game, { onIntent, tab: b.dataset.tab }));
@@ -113,9 +113,9 @@ export function terminalPanel(el, game, { onIntent, tab = null }) {
 export function mapPanel(el, game) {
   const d = game.planData();
   const site = game.session.state.site ? SITES[game.session.state.site.siteId] : null;
-  el.innerHTML = `<div class="term">${head('SITE PLAN', site ? `${site.writ} · ${site.name.toUpperCase()} · ${d.cells.length - 1} bays walked` : 'THE YARD')}
+  el.innerHTML = `<div class="term">${head('SITE PLAN', site ? `${site.writ} · ${site.name.toUpperCase()} · ${d.cells.length - 1} sections walked` : 'THE DOCKING DECK')}
     <canvas id="mapcanvas"></canvas>
-    <p class="muted">Drawn from your helmet camera as you walk. You are the arrow. The Strongbox is marked in the yard.</p></div>`;
+    <p class="muted">Drawn from your helmet camera as you walk. You are the arrow. The Strongbox is marked on the docking deck.</p></div>`;
   const cv = el.querySelector('#mapcanvas');
   requestAnimationFrame(() => drawMap(cv, d));
 }
@@ -179,7 +179,7 @@ function drawMap(cv, { cells, player }) {
       g.fillText((KINDS[c.kindId]?.name || '?').toUpperCase(), x0 + cellPx / 2, z0 + cellPx - 6 * dpr);
     }
   }
-  // the van
+  // the ship
   g.fillStyle = 'rgba(93, 255, 138, 0.8)';
   g.fillRect(ox + (9.5 / CELL) * cellPx, oz + (8 / CELL) * cellPx, (2 / CELL) * cellPx, (4.5 / CELL) * cellPx);
   if (player) {
@@ -210,13 +210,13 @@ export function reportPanel(el, report, run, { onContinue }) {
   const fees = report.fees.map((f) => `<tr><td>${esc(f.what)}</td><td class="v bad">-${fmtH(f.v)}</td></tr>`).join('');
   const lost =
     (report.lost.length ? `<tr><td class="bad">Lost with the crew left behind: ${report.lost.map((l) => esc(ITEMS[l.type].name)).join(', ')}</td><td></td></tr>` : '') +
-    (report.toolsLost?.length ? `<tr><td class="bad">Tools written off (left in the building): ${report.toolsLost.map((t) => esc(ITEMS[t].name)).join(', ')}</td><td></td></tr>` : '');
+    (report.toolsLost?.length ? `<tr><td class="bad">Tools written off (left aboard the derelict): ${report.toolsLost.map((t) => esc(ITEMS[t].name)).join(', ')}</td><td></td></tr>` : '');
   const how =
     report.reason === 'wiped'
-      ? `Signal lost from every helmet by ${fmtClock(Math.max(...report.dead.map((d) => d.min ?? report.departed)))}. The Strongbox returned on its governor, empty-cabbed.`
+      ? `Signal lost from every helmet by ${fmtClock(Math.max(...report.dead.map((d) => d.min ?? report.departed)))}. The governor undocked the Strongbox and flew her home with nobody aboard.`
       : report.reason === 'lever'
-        ? `Departed ${fmtClock(report.departed)} on the governor.`
-        : `The governor departed at 04:00${report.leftBehind.length ? ', without everyone' : ''}.`;
+        ? `Undocked ${fmtClock(report.departed)} on the governor.`
+        : `The governor undocked at 04:00${report.leftBehind.length ? ', without everyone' : ''}.`;
   const lostCrew = (report.dead || []).length && !report.clockedOut ? `<p class="bad">Signal lost: ${report.dead.length} of the crew. ${esc(CAUSE_TEXT[report.dead[0].cause] || '')}</p>` : '';
   const clocked = report.clockedOut ? `<p class="bad">${esc(CAUSE_TEXT[report.clockedOut] || 'Your signal was lost.')}</p>` : '';
   let inst = '';
@@ -225,12 +225,12 @@ export function reportPanel(el, report, run, { onContinue }) {
   else if (report.missed && report.target == null) inst = `<p><span class="stamp bad">IN DEBT</span> &nbsp; The fees have put the ledger below nothing. Grisholm &amp; Daughters do not carry debtors' debts.</p>`;
   else if (report.missed) inst = `<p><span class="stamp bad">INSTALMENT MISSED</span> &nbsp; ${fmtH(report.target)} was due.</p>`;
   else inst = `<p class="muted">Instalment ${fmtH(run.instalment.target)} due at the end of night ${run.instalment.due}. Still owed: ${fmtH(Math.max(0, run.instalment.target - run.ledger))}.</p>`;
-  const behind = report.leftBehind.length ? `<p class="bad">You were not aboard at 04:00. A recovery crew collected you at first light. Everything you carried is gone, and you are stood down for night ${report.skipped}.</p>` : '';
+  const behind = report.leftBehind.length ? `<p class="bad">You were not aboard at 04:00. A recovery tug cut you out of the derelict the next ship's morning. Everything you carried is gone, and you are stood down for night ${report.skipped}.</p>` : '';
   el.innerHTML = `<div class="term">${head(`NIGHT ${report.night} · MANIFEST`, `${site.writ} · ${site.name.toUpperCase()} · ${site.place.toUpperCase()}`, false)}
     <p>${how}</p>${clocked}${lostCrew}${behind}
     <table><tr><th>BANKED</th><th class="v">${report.items.length} ITEMS</th></tr>${items || '<tr><td class="muted">Nothing banked tonight.</td><td></td></tr>'}
     <tr><td><b>Total</b></td><td class="v"><b>${fmtH(report.banked)}</b></td></tr>${fees}${lost}</table>
-    <div class="foot"><div><div class="muted">LEDGER</div><div class="big">${fmtH(report.ledger)}</div></div><button data-continue>${run.over ? 'Read the notice' : 'Back to the van'}</button></div>
+    <div class="foot"><div><div class="muted">LEDGER</div><div class="big">${fmtH(report.ledger)}</div></div><button data-continue>${run.over ? 'Read the notice' : 'Back to the ship'}</button></div>
     ${inst}</div>`;
   el.querySelector('[data-continue]').addEventListener('click', onContinue);
 }
@@ -257,7 +257,7 @@ export function overPanel(el, run, { onNew, onTitle }) {
       <tr><td>Best find</td><td class="v">${esc(best)}</td></tr>
       <tr><td>Ledger at termination</td><td class="v ${run.ledger < 0 ? 'bad' : ''}">${fmtH(run.ledger)}</td></tr>
     </table>
-    <p class="muted">Grisholm & Daughters thank you for your service. Please return your helmet.</p>
+    <p class="muted">Grisholm & Daughters thank you for your service. Please return your helmet and suit.</p>
     <div class="foot"><button data-title>Title screen</button><button data-new>Sign a new contract</button></div></div>`;
   el.querySelector('[data-new]').addEventListener('click', onNew);
   el.querySelector('[data-title]').addEventListener('click', onTitle);
@@ -270,7 +270,7 @@ export function optionsPanel(el, save, { onSettings, onImported }) {
   el.innerHTML = `<div class="term" style="max-width:640px">${head('OPTIONS', save.data.run ? `CONTRACT IN PROGRESS · NIGHT ${save.data.run.night}` : 'NO CONTRACT')}
     <div class="opt-row"><label for="opt-sens">Look sensitivity</label><input id="opt-sens" type="range" min="0.3" max="2.5" step="0.05" value="${s.sensitivity}"></div>
     <div class="opt-row"><label for="opt-vol">Volume</label><input id="opt-vol" type="range" min="0" max="1" step="0.02" value="${s.volume}"></div>
-    <p class="muted">SAVE CODE: the contract as it stood in the van before the last night. Copy it to carry it to another browser.</p>
+    <p class="muted">SAVE CODE: the contract as it stood in the hold before the last night. Copy it to carry it to another browser.</p>
     <textarea id="opt-export" readonly spellcheck="false"></textarea>
     <div class="opt-row"><button id="opt-copy">Copy code</button><span id="opt-copy-msg" class="muted"></span></div>
     <textarea id="opt-import" placeholder="Paste a save code (NR1-...)" spellcheck="false"></textarea>

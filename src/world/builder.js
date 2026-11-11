@@ -114,6 +114,53 @@ export class SceneBuilder {
   }
 
   /**
+   * Any four-cornered panel (corners in order round the face, local space), subdivided
+   * bilinearly for the light bake. Normal follows the winding (a->b x a->d). UVs in metres.
+   * For hulls, which taper. opts as face().
+   */
+  quad(mat, a, b, c, d, opts = {}) {
+    const lu = Math.max(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), Math.hypot(c[0] - d[0], c[1] - d[1], c[2] - d[2]));
+    const lv = Math.max(Math.hypot(d[0] - a[0], d[1] - a[1], d[2] - a[2]), Math.hypot(c[0] - b[0], c[1] - b[1], c[2] - b[2]));
+    const seg = opts.seg ?? SEG;
+    const nu = Math.max(1, Math.ceil(lu / seg - 0.01));
+    const nv = Math.max(1, Math.ceil(lv / seg - 0.01));
+    const e1 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const e2 = [d[0] - b[0], d[1] - b[1], d[2] - b[2]];
+    let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const nl = Math.hypot(n[0], n[1], n[2]) || 1;
+    n = this._n(n[0] / nl, n[1] / nl, n[2] / nl);
+    const glow = !!opts.glow;
+    const bf = this.buf(mat, glow);
+    const base = bf.count;
+    const uv0 = opts.uv0 || [0, 0];
+    for (let jv = 0; jv <= nv; jv++)
+      for (let iu = 0; iu <= nu; iu++) {
+        const fu = iu / nu;
+        const fv = jv / nv;
+        const q = [0, 1, 2].map((k) => (a[k] * (1 - fu) + b[k] * fu) * (1 - fv) + (d[k] * (1 - fu) + c[k] * fu) * fv);
+        const p = this._p(q[0], q[1], q[2]);
+        bf.pos.push(p[0], p[1], p[2]);
+        bf.nrm.push(n[0], n[1], n[2]);
+        bf.uv.push(uv0[0] + lu * fu, uv0[1] + lv * fv);
+        if (glow) {
+          const g = opts.glow;
+          bf.a.push(g[0], g[1], g[2]), bf.b.push(0, 0, 0);
+          bf.lit.push(0);
+        } else {
+          bf.a.push(0, 0, 0);
+          bf.b.push(0, 0, 0);
+          bf.lit.push(1);
+        }
+      }
+    const row = nu + 1;
+    for (let jv = 0; jv < nv; jv++)
+      for (let iu = 0; iu < nu; iu++) {
+        const k = base + jv * row + iu;
+        bf.idx.push(k, k + 1, k + row + 1, k, k + row + 1, k + row);
+      }
+  }
+
+  /**
    * Axis-aligned box in the current frame. (x, y, z) is the centre of the bottom face.
    * opts: { rot, skip: 'top,bottom,...', collide, glow, flicker, seg, uvScale }
    */

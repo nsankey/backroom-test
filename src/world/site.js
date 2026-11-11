@@ -1,7 +1,7 @@
-﻿// Sites: the Halvard facilities named on Grisholm's writs. A site is a FINITE run of cells,
+﻿// Sites: the derelict Halvard craft named on Grisholm's writs. A site is a FINITE run of cells,
 // generated purely from (worldSeed, siteId, night): every client that knows those three numbers
-// builds the same building. Cell (0,0) is always the yard where the Strongbox parks; the
-// facility grows north of it from the entry cell (0,-1).
+// builds the same craft. Cell (0,0) is always the docking deck where the Strongbox sets down;
+// the craft's insides grow north of it from the airlock cell (0,-1).
 
 import { hash, hashFloat, RNG } from '../core/rng.js';
 import { DOOR_TILES } from './constants.js';
@@ -10,9 +10,9 @@ export const SITES = {
   coldstore: {
     id: 'coldstore',
     writ: 'WRIT 4471',
-    name: 'Halvard Cold Storage No. 4',
-    place: 'Pellmouth',
-    blurb: 'Refrigerated warehouse. Racking, cold rooms, plant. Believed largely intact.',
+    name: 'Reefer Freighter Halvard Constant',
+    place: 'Adrift in the Pell Reach',
+    blurb: 'Refrigerated freighter, lost power in transit. Cargo holds, cold holds, plant. Believed largely intact.',
     hazard: 1,
     cells: [8, 10],
     kinds: [['racking', 3], ['coldRoom', 3], ['corridor', 1.2], ['office', 0.8]],
@@ -23,9 +23,9 @@ export const SITES = {
   records: {
     id: 'records',
     writ: 'WRIT 4502',
-    name: 'Halvard Mutual Records Annex',
-    place: 'Grise Hill',
-    blurb: 'Insurance offices and the records store. Small, light, valuable items.',
+    name: 'Halvard Mutual Records Hulk',
+    place: 'Parked at Grise Anchorage',
+    blurb: 'The insurer’s orbiting back office. Typing pools and the records store. Small, light, valuable items.',
     hazard: 2,
     cells: [10, 12],
     kinds: [['office', 3], ['archive', 3], ['corridor', 1.5], ['racking', 0.5]],
@@ -36,9 +36,9 @@ export const SITES = {
   bottling: {
     id: 'bottling',
     writ: 'WRIT 4519',
-    name: 'Halvard Spring Water Bottling Works',
-    place: 'Ottery Vale',
-    blurb: 'Bottling hall, tank farm, packing. Heavy plant of real value. Report of activity.',
+    name: 'Halvard Ice-Water Bottling Tender',
+    place: 'Tethered in the Ottery Ring',
+    blurb: 'Cut comet ice and bottled it. Bottling hall, tank decks, packing. Heavy plant of real value. Report of activity.',
     hazard: 3,
     cells: [11, 13],
     kinds: [['plant', 3], ['racking', 1.5], ['corridor', 1], ['office', 0.8], ['coldRoom', 0.5]],
@@ -134,7 +134,7 @@ export function siteCell(worldSeed, siteId, night, cx, cz) {
 
 /** Seed for everything inside one cell on one night. */
 export function cellSeed(worldSeed, siteId, night, cx, cz) {
-  // the yard (and the van in it) is the same every night
+  // the docking deck (and the ship on it) is the same every night
   if (cx === 0 && cz === 0) return hash(worldSeed, 'yard');
   return hash(worldSeed, siteId, night, 'cell', cx, cz);
 }

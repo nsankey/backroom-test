@@ -1,5 +1,5 @@
 // THE RECORDS STORE: runs of mobile shelving packed with file boxes, wound shut except for one
-// aisle each; brown lino, painted block, low ceilings and bare battens. A reading table.
+// aisle each; studded rubber deck, painted bulkheads, low ceilings and bare battens. A reading table.
 
 import { rngFor } from '../../core/rng.js';
 import { clearOfDoors, hitsDoor } from '../kit.js';

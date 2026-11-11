@@ -1,8 +1,11 @@
 # Progress: Night Receivers (the `salvage` experiment)
 
-A co-op scavenging horror game on the Meridian Lodge engine: a crew of debtors working for
-Grisholm & Daughters, Receivers and Liquidators, clears the abandoned facilities of the defunct
-Halvard Combine one night at a time to pay the Instalment. Premise in docs/ORIGIN.md (secret),
+A co-op scavenging horror game on the Meridian Lodge engine, set in deep space: a crew of
+debtors working for Grisholm & Daughters, Receivers and Salvors, flies the salvage tug
+Strongbox out to the derelict craft of the defunct Halvard Lines, docks, and strips them one
+night (ship's time) at a time to pay the Instalment. Before the space reskin the same game was
+set in abandoned facilities on Earth, reached by armoured van; the code still calls the ship's
+hold the `van` and the docking deck the `yard`. Premise in docs/ORIGIN.md (secret),
 look and sound in docs/STYLE.md. The earlier game's progress log is in git history on `main`.
 
 ## Status
@@ -14,6 +17,7 @@ look and sound in docs/STYLE.md. The earlier game's progress log is in git histo
 | 2. Threats | done: four creatures with tells and counterplay, death and drop, signal-lost cut, notices |
 | 3. Tools | done: five tools from the van's stores, a rack in the van, kept or written off at departure |
 | 4. Co-op (local) | done: crew relay (Worker + Durable Object per room code) under `wrangler dev`, host-authoritative, up to four. Not deployed. No proximity voice |
+| Space reskin | done: the van is the salvage tug Strongbox on a docking deck, the sites are derelict craft, outer space outside (starfield, galaxy band, a banded planet, portholes), ship-plate textures, space sounds and text |
 
 ## How to run
 
@@ -51,21 +55,22 @@ the rules directly. Yaw: 0 faces -z, `-PI/2` faces +x.
 
 ## How a night goes
 
-1. **Brief** (20:50, in the van, door time-locked). The terminal lists three writs (cold store,
-   records annex, bottling works) with hazard and size. Pull the governor to drive out.
-2. **Travel**: the whole site loads (10 to 14 bays of 16 m), salvage is spread from the bays'
-   loot spots, the door unlocks at 21:00.
+1. **Brief** (20:50 ship's time, in the Strongbox's hold, door time-locked). The terminal lists
+   three writs (a reefer freighter, an insurer's records hulk, an ice-water bottling tender)
+   with hazard and size. Pull the governor to fly out.
+2. **Travel**: the Strongbox docks on the derelict's landing deck, the whole craft loads (10 to
+   14 sections of 16 m), salvage is spread from the sections' loot spots, the airlock unlocks at 21:00.
 3. **Night**: 21:00 to 04:00 in nine real minutes. Carry salvage back by hand (three slots,
    two-handed items take two, weight slows you and stops you running over 25 kg; fragile items
    lose 30 % if dropped standing, crouch to set them down). Bank it down the night safe. From
    23:00 the generators shed load; after midnight banks of lights trip out for good, cell by
-   cell. 03:00 is last call (horn); overtime is charged after it.
-4. **Departure**: pull the governor twice, or it leaves by itself at 04:00. Everything aboard is
-   banked. Anyone outside is left behind: carried items lost, a recovery fee, a night stood down.
+   cell. 03:00 is last call (klaxon); overtime is charged after it.
+4. **Departure**: pull the governor twice, or it undocks by itself at 04:00. Everything aboard is
+   banked. Anyone still on the derelict is left behind: carried items lost, a recovery fee, a night stood down.
 5. **Manifest**, then back to the brief. The Instalment (ħ400, then ×1.5 + 50) falls due every
    three nights. Miss it and the contract is terminated (notice with a run summary).
 
-## What is in the buildings
+## What is aboard the derelicts
 
 No gore anywhere: a death is the helmet camera turning to look, breaking up, and NO SIGNAL.
 The firm's terminal has a NOTICES tab that states every tell and counterplay in-world.
@@ -73,27 +78,27 @@ The firm's terminal has a NOTICES tab that states every tell and counterplay in-
 | Creature | Punishes | Tell | Counterplay |
 | --- | --- | --- | --- |
 | **Hushwarden** (blind, a brass listening horn for a head, grey dust coat) | noise | a tuning-fork drone that carries; a rising whistle when it locks on | crouch, stand still, set things down gently (crouched), make a noise elsewhere |
-| **Dimmer** (a coat hung with nobody in it) | darkness | tubes popping in a ring, a pressure hush, the camera breaking up, a travelling patch where the baked light dies | stay under working light and keep moving to the van; it rushes through dark, crawls into light |
+| **Dimmer** (a coat hung with nobody in it) | darkness | tubes popping in a ring, a pressure hush, the camera breaking up, a travelling patch where the baked light dies | stay under working light and keep moving to the ship; it rushes through dark, crawls into light |
 | **Stocktaker** (stooped clerk, a hand-tally counter for a head) | taking from its pile | the click of the count every 20 s, chalk tally marks round its post | grab between counts, or swap something onto the pile (it counts pieces, not value); drop the item and it fetches it back |
-| **Plus-One** (a receiver with the visor down and a dark tally lamp) | being alone | whistling; the helmet's counter reads PERSONS 2 and a face box finds it | keep moving (it closes only while you stand still), regroup, or get in the van |
+| **Plus-One** (a receiver with the visor down and a dark tally lamp) | being alone | whistling; the helmet's counter reads PERSONS 2 and a face box finds it | keep moving (it closes only while you stand still), regroup, or get back aboard the Strongbox |
 
 Schedule (`src/creatures/index.js`): the Stocktaker is at its post from 21:00; the Hushwarden
 starts its rounds at 23:30 / 22:45 / 22:00 by hazard (a second one later on harder writs); the
 Dimmer wakes at 01:30 / 01:00 / 00:30. The Plus-One is not scheduled: it comes after 150 / 120
-/ 95 seconds alone (not within 6 m of crew, not in the van), after 22:00.
+/ 95 seconds alone (not within 6 m of crew, not in the hold), after 22:00.
 
 Death: everything carried drops where you fall. In co-op the night goes on for the others and
-the firm bills a recovery fee per lost receiver; after the NO SIGNAL card the van's monitor
+the firm bills a recovery fee per lost receiver; after the NO SIGNAL card the ship's monitor
 patches you through to a living crew member's helmet feed until the Strongbox leaves. If the
 fees put the ledger below zero, the contract ends (IN DEBT). Solo, the night ends and the contract with it
 (NOTICE OF SIGNAL LOSS with the run summary).
 
 ## Tools
 
-Requisitioned from the STORES tab of the van terminal during the brief (one of each per crew
-member), paid from the ledger, and hung on the rack inside the van. A tool takes a hand slot.
-Tools still in the van (or carried by someone aboard) at departure are kept for the next night;
-tools left in the building are written off on the manifest.
+Requisitioned from the STORES tab of the hold's terminal during the brief (one of each per crew
+member), paid from the ledger, and hung on the rack inside the hold. A tool takes a hand slot.
+Tools still in the hold (or carried by someone aboard) at departure are kept for the next night;
+tools left on the derelict are written off on the manifest.
 
 | Tool | ħ | kg | Use (click) | Note |
 | --- | --- | --- | --- | --- |
@@ -106,9 +111,16 @@ tools left in the building are written off on the manifest.
 ## Architecture (decisions and why)
 
 - **Finite sites on the old grid generator.** `src/world/site.js` grows a site per
-  `(worldSeed, siteId, night)`: the yard at (0,0), the loading dock at (0,-1), a tree of bays to
-  the north plus loop doors. Cells outside the site are never generated and collide as solid.
-  The yard's seed ignores the site, so it is identical everywhere and stays loaded between nights.
+  `(worldSeed, siteId, night)`: the docking deck at (0,0), the cargo airlock at (0,-1), a tree of
+  sections to the north plus loop doors. Cells outside the site are never generated and collide
+  as solid. The deck's seed ignores the site, so it is identical everywhere and stays loaded
+  between nights. Any cell edge with no cell beyond it is hull: `gen.js` puts portholes in the
+  first wall in from that edge, clear of props.
+- **Space** (`src/render/space.js`): one GLSL function draws the sky by direction (three star
+  layers, a galaxy band with dust lanes, faint nebula, a banded planet lit from below by a sun
+  the hull hides). The sky dome and every porthole's glass use it, so portholes show the same
+  sky with the right parallax. It turns slowly on the shift clock (the derelicts are in orbit),
+  the same for the whole crew.
 - **The whole site is loaded at once** (`World.setSite`, two cell workers) so loot and, later,
   creatures can simulate site-wide; cells beyond 30 m of the camera are hidden. About 3 ms a
   frame with a full bottling works loaded.
@@ -140,7 +152,7 @@ tools left in the building are written off on the manifest.
   last one, 15 Hz (about 7 KB, 0.03 ms to build); phase changes and deaths go at once. Crew
   never tick the rules; they load the same sites from the same seeds. In co-op the rules keep
   running behind panels, and a worker timer steps a chief's window that gets no frames.
-- **Saves**: the run is checkpointed in the van before each night (`nightreceivers.save.v1`).
+- **Saves**: the run is checkpointed in the hold before each night (`nightreceivers.save.v1`).
   A night abandoned halfway is a night not worked. Codes are `NR1-` deflated JSON.
 
 ## Step 1 log
@@ -218,3 +230,35 @@ tools left in the building are written off on the manifest.
   IN DEBT).
 - The crew hear each other's footfalls (a heel strike placed at the figure, softer crouched).
 - Not done: proximity voice.
+
+## Space reskin log
+
+- The fiction: the crew are deep-space salvors. The van is the tug *Strongbox* (owned by
+  Grisholm & Daughters); she docks at derelict craft (a reefer freighter, a records hulk, an
+  ice-water bottling tender) and the crew strip them. Code names stay (`VAN`, `yard`, sites).
+- Sky: `src/render/space.js`, one GLSL `space(dir)` used by the sky dome and by every porthole
+  (portholes look at the sky by direction, so they have real parallax). It draws three star
+  layers, the galaxy band with dust lanes, faint nebula, and a banded cloud planet lit from
+  under the hull. It turns slowly with the shift clock.
+- Docking deck (`kinds/yard.js`): open to space, ringed by a coaming and rail, on a hull plain
+  out to the fog. The derelict's front rises on one side: the airlock collar, a bridge tower
+  with two windows still lit, red marker lamps and a dorsal block with aerials. The tug is
+  lofted hull sections with a canopy, two engine pods on legs, nav lights and a livery
+  cheat-line.
+- Portholes (`gen.js portholes()`, `props.js porthole`): on outer walls of every derelict room
+  with no cell beyond, spaced and away from props.
+- Textures: bulkhead plates, deck plate, landing pad, hull plates, laminate, perforated
+  ceiling. Sounds: hull groans and ticks, a field flutter, a klaxon, clamps and drive roar.
+- Text: title, brief, writs, notices, ledger, manifest, items and prompts all speak of ships,
+  docking and undocking.
+- Look pass 1 (deck, tug, interior): stars were too dense and laid out in a grid (better hash,
+  fewer, permuted layers); the planet looked like Earth (a banded cloud world now); bright
+  stars broke into coloured squares in the soft corners (dimmer layer, 8-tap blur); the engine
+  bells were flat orange discs (dark bell, small ember); portholes read as black holes
+  (brighter view, sheen, chrome rim); bulkheads repeated stencils (one each); the tug's nose
+  vanished in the dark (landing lamps).
+- Look pass 2: the planet hung behind the derelict's front, lit where the coaming hid it
+  (moved over the open side of the deck, lit from below: a crescent); the tug's flanks were
+  one flat grey (cream cheat-line); the bridge tower was an invisible black slab against the
+  stars (red marker lamps on its corners and the roofline, a lit strip under the windows).
+- Checks: no console errors; determinism check passes (fingerprint 656d54db); build passes.

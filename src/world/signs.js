@@ -21,6 +21,10 @@ export const SIGN_ROWS = [
   'PLANT ROOM',
   'SHUT OFF AT 04:00',
   'HALVARD MUTUAL',
+  'HALVARD LINES',
+  'AIRLOCK',
+  'STRONGBOX',
+  'CHECK YOUR SEAL',
 ];
 export const SIGN_ROW_COUNT = 24;
 export const signRow = (text) => SIGN_ROWS.indexOf(text);

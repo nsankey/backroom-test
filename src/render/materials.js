@@ -2,6 +2,7 @@
 // and glow surfaces that show their baked emissive colour. Textures come from a worker.
 
 import * as THREE from 'three';
+import { viewportMaterial } from './space.js';
 
 // name -> { tex, scale: metres per texture repeat [u, v], color }
 const DEFS = {
@@ -66,6 +67,8 @@ const DEFS = {
   signsGlow: { glow: true, tex: 'signsGlow', scale: [1, 1] },
   vendingGlow: { glow: true, tex: 'vendingGlow', scale: [1, 1] },
   screen: { glow: true, tex: 'screen', scale: [1, 1], animate: 'flicker' },
+  // a porthole's glass: shows the sky by view direction
+  viewport: { sky: true },
 };
 
 // textures whose UVs are explicit (uvRect) rather than metres
@@ -128,7 +131,7 @@ export class MaterialLibrary {
     let m = this.base.get(key);
     if (m) return m;
     const def = DEFS[name] || { color: 0xff00ff };
-    m = glow || def.glow ? this._makeGlow(name, def) : this._makeLit(name, def);
+    m = def.sky ? viewportMaterial() : glow || def.glow ? this._makeGlow(name, def) : this._makeLit(name, def);
     this.base.set(key, m);
     return m;
   }
@@ -165,6 +168,10 @@ export class MaterialLibrary {
     const base = this.get(name, glow);
     const m = base.clone();
     m.userData = { ...base.userData };
+    if (m.userData.kind === 'sky') {
+      m.uniforms = base.uniforms; // one turning sky, shared
+      return m;
+    }
     injectBake(m, this.shared, m.userData.kind === 'glow', cellUniforms);
     return m;
   }

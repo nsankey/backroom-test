@@ -1,13 +1,13 @@
-// GOODS IN: the receiving bay just inside the facility door. High steel deck, sealed slab,
-// roller shutters on the yard wall, pallets left where the night shift put them down, and the
-// clock station by the door, every card still in the IN column.
+// CARGO AIRLOCK: the receiving bay just inside the craft's airlock. High deckhead, deck plate,
+// cargo shutters on the hull side, pallets left where the last shift put them down, and the
+// clock station by the airlock, every card still in the IN column.
 
 import { rngFor } from '../../core/rng.js';
 import { clearOfDoors, clearAround, hitsDoor } from '../kit.js';
 
 export default {
   id: 'dock',
-  name: 'Goods In',
+  name: 'Cargo Airlock',
   weight: 0,
 
   layout(seed, plan) {
@@ -16,7 +16,7 @@ export default {
     plan.fill(1, 1, 30, 30, room);
     plan.ambient = [0.022, 0.024, 0.026];
 
-    // yard wall (south): the shutter matching the one outside, the clock station by the door
+    // hull side (south, toward the docking deck): the shutter matching the one outside, the clock station by the door
     plan.prop('rollerShutter', 12.4, 15.5, Math.PI, { w: 2.8, h: 3.4 });
     plan.prop('clockStation', 4.0, 15.5, Math.PI);
     plan.prop('sign', 4.0, 15.5, Math.PI, { text: 'CLOCK IN  -  CLOCK OUT', y: 2.1, w: 1.6, h: 0.1 });

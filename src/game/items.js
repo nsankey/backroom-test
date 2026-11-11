@@ -11,7 +11,7 @@ export const ITEMS = {
   typeball: { name: 'Typewriter golf-ball', kind: 'loot', value: [8, 14], kg: 0.2, slots: 1 },
   seal: { name: 'Embossing seal press', kind: 'loot', value: [24, 38], kg: 3.2, slots: 1 },
   reel: { name: 'Reel of data tape', kind: 'loot', value: [10, 18], kg: 1.1, slots: 1 },
-  globe: { name: 'Boardroom globe', kind: 'loot', value: [22, 36], kg: 3.5, slots: 1, fragile: true },
+  globe: { name: 'Boardroom star globe', kind: 'loot', value: [22, 36], kg: 3.5, slots: 1, fragile: true },
   dictaphone: { name: 'Dictation machine', kind: 'loot', value: [16, 26], kg: 2.0, slots: 1 },
   penCase: { name: 'Presentation pen set', kind: 'loot', value: [28, 48], kg: 0.4, slots: 1 },
   ledgerBook: { name: 'Bound ledger', kind: 'loot', value: [10, 20], kg: 2.4, slots: 1 },
@@ -19,9 +19,9 @@ export const ITEMS = {
   plaque: { name: 'Long-service plaque', kind: 'loot', value: [4, 9], kg: 1.4, slots: 1 },
   busbar: { name: 'Copper bus bar', kind: 'loot', value: [28, 44], kg: 8.5, slots: 1 },
   gauge: { name: 'Brass pressure gauge', kind: 'loot', value: [14, 24], kg: 1.6, slots: 1 },
-  meterHead: { name: 'Electricity meter', kind: 'loot', value: [14, 24], kg: 3.4, slots: 1 },
-  fanMotor: { name: 'Extractor fan motor', kind: 'loot', value: [42, 70], kg: 21, slots: 2 },
-  urn: { name: 'Canteen tea urn', kind: 'loot', value: [18, 30], kg: 7, slots: 2 },
+  meterHead: { name: 'Power-deck meter', kind: 'loot', value: [14, 24], kg: 3.4, slots: 1 },
+  fanMotor: { name: 'Air scrubber fan motor', kind: 'loot', value: [42, 70], kg: 21, slots: 2 },
+  urn: { name: 'Galley tea urn', kind: 'loot', value: [18, 30], kg: 7, slots: 2 },
   carboy: { name: 'Glass carboy', kind: 'loot', value: [34, 58], kg: 16, slots: 2, fragile: true },
   teleprinter: { name: 'Teleprinter', kind: 'loot', value: [45, 72], kg: 24, slots: 2 },
 
@@ -33,7 +33,7 @@ export const ITEMS = {
     kg: 1.2,
     slots: 1,
     charge: 1,
-    blurb: 'A battery hand lamp with a thick lens. F switches it on while carried. About four minutes of light a night; recharged in the van. Held steady on something that hides in the dark, it drives it back.',
+    blurb: 'A battery hand lamp with a thick lens. F switches it on while carried. About four minutes of light a night; recharged in the hold. Held steady on something that hides in the dark, it drives it back.',
   },
   extinguisher: {
     name: 'CO₂ extinguisher',
@@ -42,7 +42,7 @@ export const ITEMS = {
     kg: 6.5,
     slots: 1,
     charge: 4,
-    blurb: 'Four blasts a night. A blast stops anything in front of you within five metres for a few seconds. It is very loud. Refilled in the van.',
+    blurb: 'Four blasts a night. A blast stops anything in front of you within five metres for a few seconds. It is very loud. Refilled in the hold.',
   },
   pricegun: {
     name: 'Appraiser’s tag gun',
@@ -67,7 +67,7 @@ export const ITEMS = {
     kg: 1.4,
     slots: 1,
     strange: true,
-    blurb: 'Found in a Halvard site office; the stores will not say which. Use it to play the tape: footsteps and a voice reading out an inventory, loud enough to draw a listener to wherever you leave it. It sometimes plays by itself.',
+    blurb: 'Found aboard a Halvard tender; the stores will not say which. Use it to play the tape: footsteps and a voice reading out an inventory, loud enough to draw a listener to wherever you leave it. It sometimes plays by itself.',
   },
 };
 

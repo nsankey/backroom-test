@@ -1,4 +1,4 @@
-// COLD ROOM: insulated white panels, a frosted epoxy floor, stacks of rimed stock on pallets
+// COLD HOLD: a reefer hold. Insulated white panels, a frosted epoxy deck, stacks of rimed stock on pallets
 // and evaporators breathing along one wall. Sealed blue-white fittings. Still cold.
 
 import { rngFor } from '../../core/rng.js';
@@ -6,7 +6,7 @@ import { clearOfDoors, hitsDoor } from '../kit.js';
 
 export default {
   id: 'coldRoom',
-  name: 'Cold Room',
+  name: 'Cold Hold',
   weight: 1,
   doorMats: { wall: 'panelWhite', floor: 'freezerFloor' },
 

@@ -14,6 +14,7 @@ import { Input } from '../core/input.js';
 import { AudioEngine } from '../audio/audio.js';
 import { MaterialLibrary } from '../render/materials.js';
 import { HelmetCamShader } from '../render/helmetcam.js';
+import { skyDome, turnSky } from '../render/space.js';
 import { World } from '../world/world.js';
 import { CELL } from '../world/constants.js';
 import { SITES } from '../world/site.js';
@@ -32,7 +33,7 @@ import { Views } from './views.js';
 import { CoopHost, CoopClient } from './coop.js';
 
 export const LOCAL = 'p1';
-// where each crew member stands at the brief, by pid (the van is narrow)
+// where each crew member stands at the brief, by pid (the hold is narrow)
 const SPAWN_OFFSET = { p1: [0, 0], p2: [0.55, 0.1], p3: [-0.55, 0.1], p4: [0, 0.75] };
 
 export class Game {
@@ -78,7 +79,7 @@ export class Game {
     this.fade = 0;
     this.fadeTarget = 1;
     this.exposure = { v: 1.4, vel: 0 };
-    this.travel = null; // { stage, t } while the Strongbox drives
+    this.travel = null; // { stage, t } while the Strongbox flies
     this.onUiAction = null; // (name, arg) => void, set by main
     this.visited = new Set(); // cell keys walked tonight (for the site plan)
     this.tripped = new Set(); // cells whose bank has tripped tonight
@@ -122,7 +123,7 @@ export class Game {
     this.ensureLoop();
   }
 
-  /** Take up a contract (new or saved) and stand in the van for the night's brief. */
+  /** Take up a contract (new or saved) and stand in the hold for the night's brief. */
   async startContract(run, onProgress = () => {}) {
     this.leaveCrew();
     this.pid = LOCAL;
@@ -151,8 +152,8 @@ export class Game {
     this.pid = link.pid;
     this.session = new Session(st.run);
     this.session.state = st;
-    // the brief's yard and building; if the crew is already out on a writ, the client's tick
-    // notices and drives out to it
+    // the brief's deck and derelict; if the crew is already out on a writ, the client's tick
+    // notices and flies out to it
     await this.loadBrief(onProgress);
   }
 
@@ -167,11 +168,11 @@ export class Game {
     return this.session.applyIntent(this.pid, i);
   }
 
-  /** Load the yard (and the writ's building behind its locked door) and stand at the bench. */
+  /** Load the docking deck (and the writ's derelict behind its locked airlock) and stand at the bench. */
   async loadBrief(onProgress = () => {}) {
     const run = this.session.state.run;
     this.views.clear();
-    onProgress('parking up');
+    onProgress('docking');
     await this.loadSite({ worldSeed: run.seed, siteId: run.siteId, night: run.night }, (d, n) => onProgress(`surveying ${d}/${n}`));
     this.placeAtSpawn();
     this.fadeTarget = 1;
@@ -322,7 +323,7 @@ export class Game {
     const coop = this.coop;
     if (coop?.client) {
       for (const e of coop.tick(p)) this.onSessionEvent(e);
-      // the crew is out on a writ this client has not driven to (joined late, or missed the start)
+      // the crew is out on a writ this client has not flown to (joined late, or missed the start)
       if (!this.travel && s.phase === 'night' && s.state.site && !sameSite(this.loadedSite, s.state.site)) this.beginTravel();
     } else {
       coop?.beforeTick();
@@ -406,7 +407,7 @@ export class Game {
         break;
       case 'leverArmed':
         this.audio.play('lever', { x: 11.3, y: 1.3, z: 11.85 });
-        if (mine) this.ui.caption(e.outside ? `Pull again to leave. ${e.outside} of the crew still outside.` : 'Pull again to leave now.', 4);
+        if (mine) this.ui.caption(e.outside ? `Pull again to undock. ${e.outside} of the crew still aboard the derelict.` : 'Pull again to undock now.', 4);
         break;
       case 'leverReset':
         break;
@@ -418,7 +419,7 @@ export class Game {
         break;
       case 'lastCall':
         this.audio.play('horn', { x: VAN.door.x, y: 2.5, z: 14 });
-        this.ui.caption('03:00. LAST CALL. The Strongbox leaves at 04:00. Overtime is charged from now.', 6);
+        this.ui.caption('03:00. LAST CALL. The Strongbox undocks at 04:00. Overtime is charged from now.', 6);
         break;
       case 'depart':
         this.beginDeparture(e);
@@ -460,7 +461,7 @@ export class Game {
         break;
       case 'lampOut':
         this.audio.play('lampOut', pos);
-        if (mine) this.ui.caption('The lamp’s battery is flat. It charges in the van.', 3);
+        if (mine) this.ui.caption('The lamp’s battery is flat. It charges in the hold.', 3);
         break;
       case 'blast':
         this.audio.play('blast', { x: e.x, y: 1.2, z: e.z }, { ref: 3, wet: 0.6 });
@@ -469,7 +470,7 @@ export class Game {
         break;
       case 'empty':
         this.audio.play('click', pos);
-        if (mine) this.ui.caption('Empty. It is refilled in the van.', 2);
+        if (mine) this.ui.caption('Empty. It is refilled in the hold.', 2);
         break;
       case 'tag':
         this.audio.play('beep', { x: this.player.x, y: 1.2, z: this.player.z });
@@ -540,7 +541,7 @@ export class Game {
   }
 
   /**
-   * In co-op, a few seconds after your signal is lost the van's monitor patches you through to
+   * In co-op, a few seconds after your signal is lost the ship's monitor patches you through to
    * a crew member still working: you watch their helmet feed until the Strongbox leaves.
    */
   updateRelay() {
@@ -633,7 +634,7 @@ export class Game {
       tr.stage = 'loading';
       const st = this.session.state;
       const run = st.run;
-      // a crew member drives to whatever the chief is working; the chief to the chosen writ
+      // a crew member flies to whatever the chief is working; the chief to the chosen writ
       const site = this.coop?.client && st.phase === 'night' && st.site ? { ...st.site } : { worldSeed: run.seed, siteId: run.siteId, night: run.night };
       this.onUiAction?.('travel', { site: SITES[site.siteId], night: site.night });
       await this.loadSite(site, (d, n) => this.ui.travelProgress?.(d, n));
@@ -770,9 +771,9 @@ export class Game {
       return n ? `Night safe: bank ${n} item${n > 1 ? 's' : ''}` : 'Night safe: carry salvage here';
     }
     if (it.type === 'governor') {
-      if (s.phase === 'brief') return `Pull the governor: drive to ${SITES[s.state.run.siteId].name}`;
-      if (s.state.lever >= 0 && s.state.tick - s.state.lever < TICK_HZ * 4) return 'Pull again: leave now';
-      return 'Pull the governor: leave now';
+      if (s.phase === 'brief') return `Pull the governor: fly to the ${SITES[s.state.run.siteId].name}`;
+      if (s.state.lever >= 0 && s.state.tick - s.state.lever < TICK_HZ * 4) return 'Pull again: undock now';
+      return 'Pull the governor: undock now';
     }
     if (it.type === 'terminal') return 'Use the terminal';
     return it.prompt || 'Use';
@@ -866,7 +867,7 @@ export class Game {
     };
   }
 
-  /** Interference on the helmet feed: some things in the building disturb the camera. */
+  /** Interference on the helmet feed: some things aboard the derelict disturb the camera. */
   updateGlitch(dt) {
     let want = 0;
     const st = this.session?.state;
@@ -908,6 +909,8 @@ export class Game {
     this.roll = (this.roll || 0) + (-side * 0.014 - (this.roll || 0)) * Math.min(1, dt * 5);
     cam.rotation.z = this.roll + Math.sin(t * 0.5) * 0.003;
     this.sky.position.copy(cam.position);
+    // the derelict's orbit: the sky turns on the ship's clock, the same for the whole crew
+    turnSky((this.session?.state?.shiftTick ?? 0) / 60 + 900);
 
     // auto-exposure: meters the scene ahead, hunts a little (a spring that overshoots)
     const l = this.world.lightAt(x - sy * 1.5, 1.4, z - cy * 1.5, this._lit || (this._lit = [0, 0, 0]));
@@ -1137,40 +1140,6 @@ function toolCharge(it) {
   if (it.type === 'lamp') return `${Math.round(it.charge * 100)}%`;
   if (it.type === 'extinguisher') return `${it.charge}/${ITEMS.extinguisher.charge}`;
   return '';
-}
-
-/**
- * The night sky over the yard: low cloud lit from beneath by a town's sodium lamps, brownish at
- * the horizon and nearly black overhead. Drawn behind everything, unaffected by fog.
- */
-function skyDome() {
-  const mat = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    depthWrite: false,
-    fog: false,
-    uniforms: {},
-    vertexShader: `varying vec3 vDir; void main() { vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
-    fragmentShader: `varying vec3 vDir;
-      float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-      float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
-      void main() {
-        float y = max(vDir.y, 0.0);
-        vec3 horizon = vec3(0.16, 0.1, 0.06);
-        vec3 zenith = vec3(0.012, 0.014, 0.02);
-        vec3 c = mix(horizon, zenith, pow(y, 0.45));
-        // the cloud deck: soft lumps catching the glow
-        vec2 q = vDir.xz / (vDir.y + 0.25) * 2.0;
-        float cl = n(q) * 0.6 + n(q * 2.3) * 0.3 + n(q * 5.1) * 0.1;
-        c *= 0.75 + 0.5 * cl;
-        gl_FragColor = vec4(c, 1.0);
-        #include <colorspace_fragment>
-      }`,
-  });
-  const m = new THREE.Mesh(new THREE.SphereGeometry(80, 24, 12), mat);
-  m.renderOrder = -1;
-  m.frustumCulled = false;
-  return m;
 }
 
 /** The crew member's insurance ID, as stencilled on the helmet. */

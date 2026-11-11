@@ -5,17 +5,19 @@
 import { rngFor } from '../core/rng.js';
 import { N, TILE } from './constants.js';
 import { cellDoors, cellKindId } from './grid.js';
-import { cellSeed } from './site.js';
+import { cellSeed, siteCell } from './site.js';
 import { KINDS } from './kinds/index.js';
 import { Plan } from './plan.js';
 import { SceneBuilder } from './builder.js';
 import { buildProp } from './props.js';
 
-// footstep surfaces: 0 soft (carpet), 1 hard (concrete, tile), 2 metal (steel plate)
+// footstep surfaces: 0 soft (carpet), 1 hard (tile, rubber), 2 metal (steel plate)
+// (the deck materials keep their old names: sealedConcrete, concrete and asphalt are all
+// painted steel deck plate now)
 const SURFACE = {
-  concrete: 1,
-  sealedConcrete: 1,
-  asphalt: 1,
+  concrete: 2,
+  sealedConcrete: 2,
+  asphalt: 2,
   freezerFloor: 1,
   quarryTile: 1,
   threshold: 1,
@@ -32,8 +34,49 @@ export function planCell(ctx, cx, cz, kindOverride = null) {
   const seed = cellSeed(ctx.worldSeed, ctx.siteId, ctx.night, cx, cz);
   const plan = new Plan({ seed, cx, cz, doors, kindId, siteId: ctx.siteId });
   kind.layout(seed, plan);
+  if (kindId !== 'yard' && ctx.siteId) portholes(ctx, plan, seed);
   plan.openBoundaryDoors(kind.doorMats || {});
   return { plan, kind, seed };
+}
+
+/**
+ * Portholes in the walls that face space: on every edge of the cell with no cell of the craft
+ * beyond it, a few round ports along the first wall in from the edge, clear of props.
+ */
+function portholes(ctx, plan, seed) {
+  const rng = rngFor(seed, 'ports');
+  const near = (x, z, r) => plan.props.some((p) => Math.hypot(p.x - x, p.z - z) < r);
+  for (const [dir, dx, dz, rot] of [['N', 0, -1, 0], ['S', 0, 1, Math.PI], ['W', -1, 0, Math.PI / 2], ['E', 1, 0, -Math.PI / 2]]) {
+    if (siteCell(ctx.worldSeed, ctx.siteId, ctx.night, plan.cx + dx, plan.cz + dz)) continue;
+    // depth of the first floor tile in from the edge, at position k along it
+    const tileAt = (k, d) => (dir === 'N' ? [k, d] : dir === 'S' ? [k, N - 1 - d] : dir === 'W' ? [d, k] : [N - 1 - d, k]);
+    const depth = (k) => {
+      for (let d = 1; d < 10; d++) {
+        const [i, j] = tileAt(k, d);
+        if (plan.isFloor(i, j)) return d;
+      }
+      return -1;
+    };
+    let last = -99;
+    for (let k = 3; k < N - 3; k++) {
+      if (k - last < 6) continue;
+      const d = depth(k);
+      if (d < 0 || depth(k - 1) !== d || depth(k + 1) !== d) continue;
+      const [i, j] = tileAt(k, d);
+      const zone = plan.zoneAt(i, j);
+      if (zone.sky || zone.door || zone.ceil < 2.3) continue;
+      // the wall face, in metres, and the port's centre on it
+      const along = (k + 0.5) * TILE;
+      const face = dir === 'N' || dir === 'W' ? d * TILE : (N - d) * TILE;
+      const x = dir === 'N' || dir === 'S' ? along : face;
+      const z = dir === 'N' || dir === 'S' ? face : along;
+      if (near(x, z, 1.8)) continue;
+      if (!rng.chance(0.55)) continue;
+      const big = zone.ceil > 4;
+      plan.prop('porthole', x, z, rot, { y: big ? 1.9 : Math.min(1.55, zone.ceil - 0.7), r: big ? 0.34 : 0.24 });
+      last = k;
+    }
+  }
 }
 
 export function generateCell(ctx, cx, cz, { kindOverride = null, bake = true } = {}) {

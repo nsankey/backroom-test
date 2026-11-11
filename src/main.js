@@ -79,7 +79,7 @@ async function joinCrew(raw) {
   ui.show('#travel', true);
   $('#travel-eyebrow').textContent = `ROOM ${code} · CH ${channelOf(link.pid)}`;
   $('#travel-site').textContent = 'JOINING THE CREW';
-  $('#travel-blurb').textContent = 'Patching your helmet into the van...';
+  $('#travel-blurb').textContent = 'Patching your helmet into the Strongbox...';
   ui.travelProgress(0, 1);
   try {
     await game.joinCrew(link, (msg) => ($('#travel-blurb').textContent = msg + '...'));
@@ -148,15 +148,15 @@ function lockPointer() {
 async function load(run) {
   ui.show('#title', false);
   ui.show('#travel', true);
-  $('#travel-eyebrow').textContent = 'STRONGBOX · DEPOT';
+  $('#travel-eyebrow').textContent = 'STRONGBOX · HOME BERTH';
   $('#travel-site').textContent = `NIGHT ${run.night}`;
-  $('#travel-blurb').textContent = 'Checking the van out of the depot.';
+  $('#travel-blurb').textContent = 'Signing the Strongbox out of its berth.';
   ui.travelProgress(0, 1);
   await game.startContract(run, (msg) => ($('#travel-blurb').textContent = msg + '...'));
   ui.show('#travel', false);
   enter();
   if (run.night === 1 && !run.history.length) {
-    setTimeout(() => ui.caption('Use the terminal (E) to choose tonight\'s writ, then pull the governor by the door.', 7), 900);
+    setTimeout(() => ui.caption('Use the terminal (E) to choose tonight\'s derelict, then pull the governor by the door to fly out.', 7), 900);
   }
 }
 
@@ -206,7 +206,7 @@ const PANEL_KEYS = { map: ['KeyM', 'Tab'], terminal: ['KeyE'] };
 function onGameUi(name, arg) {
   if (name === 'travel') {
     ui.show('#travel', true);
-    $('#travel-eyebrow').textContent = `EN ROUTE · NIGHT ${arg.night}`;
+    $('#travel-eyebrow').textContent = `IN TRANSIT · NIGHT ${arg.night}`;
     $('#travel-site').textContent = `${arg.site.writ} · ${arg.site.name.toUpperCase()}`;
     $('#travel-blurb').textContent = `${arg.site.place}. ${arg.site.blurb}`;
     ui.travelProgress(0, 1);
@@ -237,8 +237,8 @@ function openPanel(name, from, arg) {
     reportPanel(el, arg, game.session.state.run, {
       onContinue: async () => {
         const say = (msg) => (el.innerHTML = `<div class="term"><p>${msg}...</p></div>`);
-        say('Driving back');
-        const r = await game.afterReport((msg) => say(msg === 'waiting for the crew chief' ? 'Waiting for the crew chief to sign the manifest' : 'Driving back'));
+        say('Flying home');
+        const r = await game.afterReport((msg) => say(msg === 'waiting for the crew chief' ? 'Waiting for the crew chief to sign the manifest' : 'Flying home'));
         if (r === 'over') {
           const run = game.session.state.run;
           if (!game.coop?.client) save.endContract(run); // the chief's contract, not ours
