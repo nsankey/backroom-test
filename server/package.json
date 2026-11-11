@@ -1,0 +1,13 @@
+{
+  "name": "night-receivers-relay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Crew relay for Night Receivers co-op: a Worker with a Durable Object per room code. Local only (wrangler dev).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.160.0"
+  }
+}

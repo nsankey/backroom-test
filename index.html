@@ -15,6 +15,7 @@
         <div class="rec"><span class="dot"></span>REC <span id="hud-crew"></span></div>
         <div id="hud-site"></div>
         <div id="hud-persons">PERSONS 1</div>
+        <div id="hud-room" class="hidden"></div>
       </div>
       <div id="hud-tr">
         <div id="hud-clock">--:--</div>
@@ -41,6 +42,14 @@
           <button id="btn-continue" class="hidden">Continue contract</button>
           <button id="btn-new">Sign a contract</button>
           <button id="btn-options">Options</button>
+        </div>
+        <div id="crew-menu" class="menu crew-menu hidden">
+          <div class="crew-label">CREW (CO-OP)</div>
+          <button id="btn-host">Take a crew out</button>
+          <form id="join-form" class="join-form">
+            <input id="join-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Room code" />
+            <button id="btn-join" type="submit">Join a crew</button>
+          </form>
         </div>
         <p id="loading" class="loading"></p>
         <p id="records" class="records"></p>

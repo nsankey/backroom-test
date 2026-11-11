@@ -29,8 +29,11 @@ import { ToolViews } from './toolviews.js';
 import { spawnLoot } from './loot.js';
 import { facilityPower, bankTripMin, fmtClock, shiftMinutes, ticksAt, LAST_CALL_MIN } from './clock.js';
 import { Views } from './views.js';
+import { CoopHost, CoopClient } from './coop.js';
 
 export const LOCAL = 'p1';
+// where each crew member stands at the brief, by pid (the van is narrow)
+const SPAWN_OFFSET = { p1: [0, 0], p2: [0.55, 0.1], p3: [-0.55, 0.1], p4: [0, 0.75] };
 
 export class Game {
   constructor({ canvas, ui, save, debug = false }) {
@@ -44,6 +47,9 @@ export class Game {
     this.listeners = new Set(); // per-frame/tick systems: { tick?(game, actions, events), frame?(game, dt) }
     this.session = null;
     this.pid = LOCAL;
+    this.coop = null; // CoopHost | CoopClient while crewed up
+    this.onCoopEvent = null; // ({ type }) => void, set by main
+    this.loadedSite = null;
 
     const renderer = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' }));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -118,10 +124,47 @@ export class Game {
 
   /** Take up a contract (new or saved) and stand in the van for the night's brief. */
   async startContract(run, onProgress = () => {}) {
-    this.session = new Session(run, { solo: true });
+    this.leaveCrew();
+    this.pid = LOCAL;
+    this.session = new Session(run);
     this.session.addPlayer(this.pid, crewId(run.seed));
+    this.session.drain();
     this.session.stockVan();
     await this.loadBrief(onProgress);
+  }
+
+  /** Open a room on the relay for the contract in hand: this browser becomes the crew chief. */
+  hostCrew(link) {
+    this.leaveCrew();
+    this.coop = new CoopHost(this, link);
+    this.watchVisibility();
+  }
+
+  /** Join a crew chief's room: take their state and load what they are working. */
+  async joinCrew(link, onProgress = () => {}) {
+    this.leaveCrew();
+    const coop = new CoopClient(this, link);
+    this.coop = coop;
+    this.watchVisibility();
+    onProgress('waiting for the crew chief');
+    const st = await Promise.race([coop.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('no answer from the crew chief')), 8000))]);
+    this.pid = link.pid;
+    this.session = new Session(st.run);
+    this.session.state = st;
+    // the brief's yard and building; if the crew is already out on a writ, the client's tick
+    // notices and drives out to it
+    await this.loadBrief(onProgress);
+  }
+
+  leaveCrew() {
+    this.coop?.close();
+    this.coop = null;
+  }
+
+  /** Apply (solo, chief) or send (crew) one of the local player's intents. */
+  intent(i) {
+    if (this.coop?.client) return this.coop.intent(i);
+    return this.session.applyIntent(this.pid, i);
   }
 
   /** Load the yard (and the writ's building behind its locked door) and stand at the bench. */
@@ -141,6 +184,7 @@ export class Game {
     } finally {
       clearInterval(pump);
     }
+    this.loadedSite = { ...site };
     this.visited.clear();
     this.tripped.clear();
     this.renderer.compile(this.scene, this.camera);
@@ -150,8 +194,9 @@ export class Game {
     const yard = this.world.cells.get('0,0');
     const sp = yard.points.spawn;
     const p = this.player;
-    p.x = sp.x;
-    p.z = sp.z;
+    const off = SPAWN_OFFSET[this.pid] || [0, 0];
+    p.x = sp.x + off[0];
+    p.z = sp.z + off[1];
     p.yaw = Math.PI; // facing the rear door
     p.pitch = -0.05;
     p.vx = p.vz = 0;
@@ -235,11 +280,17 @@ export class Game {
     const s = this.session;
     const p = this.player;
     const actions = this.input.takeActions();
-    const frozen = !s || this.travel || s.phase === 'report' || s.phase === 'over' || !!this.deathCut;
+    // (in co-op the rules keep running while a panel or the pause screen is up)
+    const frozen = !s || this.travel || s.phase === 'report' || s.phase === 'over' || !!this.deathCut || this.paused;
     if (frozen) {
       actions.moveX = actions.moveZ = 0;
       actions.run = false;
       actions.interact = actions.drop = false;
+      if (this.paused) {
+        actions.slot = -1;
+        actions.cycle = 0;
+        actions.map = actions.lamp = actions.use = false;
+      }
     }
     const events = [];
     this.prev.x = p.x;
@@ -248,27 +299,40 @@ export class Game {
     this.prev.bob = p.bob;
     stepPlayer(p, actions, this.world, TICK, events, this.feltKg());
     if (!s) return;
+    const me = this.localPlayer();
+    if (!me) return; // (a crew member's first state has not arrived)
     s.updatePlayer(this.pid, p);
     // footsteps are heard by whatever is listening
-    for (const e of events) if (e.type === 'step') s.applyIntent(this.pid, { type: 'noise', x: e.x, z: e.z, loud: e.loud });
+    for (const e of events) if (e.type === 'step') this.intent({ type: 'noise', x: +e.x.toFixed(2), z: +e.z.toFixed(2), loud: e.loud });
 
     // slots, take, drop, interact: all become intents
-    const me = this.localPlayer();
-    if (actions.slot >= 0) s.applyIntent(this.pid, { type: 'slot', slot: actions.slot });
-    if (actions.cycle) s.applyIntent(this.pid, { type: 'slot', slot: (me.active + actions.cycle + SLOTS) % SLOTS });
+    if (actions.slot >= 0) this.intent({ type: 'slot', slot: actions.slot });
+    if (actions.cycle) this.intent({ type: 'slot', slot: (me.active + actions.cycle + SLOTS) % SLOTS });
     this.nearInteraction = frozen ? null : this.findInteraction();
     if (actions.interact && this.nearInteraction) this.interact(this.nearInteraction);
     if (actions.drop) this.dropActive();
     if (actions.map) this.onUiAction?.('map');
-    if (!frozen && actions.lamp) s.applyIntent(this.pid, { type: 'lamp' });
+    if (!frozen && actions.lamp) this.intent({ type: 'lamp' });
     if (!frozen && actions.use) {
       const it = this.activeItem();
-      if (it && isTool(it.type)) s.applyIntent(this.pid, { type: 'use', yaw: p.yaw, pitch: p.pitch, target: it.type === 'pricegun' ? this.aimItem()?.id || null : null });
+      if (it && isTool(it.type)) this.intent({ type: 'use', yaw: p.yaw, pitch: p.pitch, target: it.type === 'pricegun' ? this.aimItem()?.id || null : null });
     }
 
-    // the session's own clock, alarms and departure
-    s.tick(this.world);
-    for (const e of s.drain()) this.onSessionEvent(e);
+    // the session's own clock, alarms and departure (on the crew chief's machine)
+    const coop = this.coop;
+    if (coop?.client) {
+      for (const e of coop.tick(p)) this.onSessionEvent(e);
+      // the crew is out on a writ this client has not driven to (joined late, or missed the start)
+      if (!this.travel && s.phase === 'night' && s.state.site && !sameSite(this.loadedSite, s.state.site)) this.beginTravel();
+    } else {
+      coop?.beforeTick();
+      s.tick(this.world);
+      const evs = s.drain();
+      coop?.queue(evs);
+      coop?.afterTick();
+      for (const e of evs) this.onSessionEvent(e);
+    }
+    this.updateRelay();
 
     // current place
     const cell = this.world.cellAt(p.x, p.z);
@@ -384,6 +448,11 @@ export class Game {
         break;
       case 'death':
         if (mine) this.beginDeathCut(e);
+        else {
+          const q = s.state.players[e.pid];
+          this.audio.play('signalLost', null, { level: 0.5 });
+          this.ui.caption(`CH ${channelOf(e.pid)} · SIGNAL LOST${q ? ` · ${q.name}` : ''}`, 4);
+        }
         break;
       // ---- tools ----
       case 'lamp':
@@ -419,6 +488,16 @@ export class Game {
       case 'buyRefused':
         if (mine) this.ui.caption(e.why === 'funds' ? 'The ledger will not stand it.' : 'The crew already has one each.', 2.5);
         break;
+      // ---- the crew ----
+      case 'crewIn':
+        if (!mine) {
+          this.audio.play('click');
+          this.ui.caption(`CH ${channelOf(e.pid)} is on the line: ${e.name}.`, 3);
+        }
+        break;
+      case 'crewOut':
+        if (!mine) this.ui.caption(`CH ${channelOf(e.pid)} has dropped off the line. What ${e.name} carried is where they stood.`, 4);
+        break;
     }
   }
 
@@ -445,6 +524,7 @@ export class Game {
       p.yaw += dy * k;
       p.pitch += (Math.max(-0.6, Math.min(0.9, pitch)) - p.pitch) * k;
     }
+    if (d.relay) return; // watching a crew member's feed (updateRelay)
     this.glitch = Math.min(1, 0.2 + d.t * 1.1);
     if (d.t > 1.0 && !d.cut) {
       d.cut = true;
@@ -457,6 +537,39 @@ export class Game {
   clearDeathCut() {
     this.deathCut = null;
     document.getElementById('nosignal')?.classList.remove('on');
+  }
+
+  /**
+   * In co-op, a few seconds after your signal is lost the van's monitor patches you through to
+   * a crew member still working: you watch their helmet feed until the Strongbox leaves.
+   */
+  updateRelay() {
+    const d = this.deathCut;
+    const st = this.session?.state;
+    if (!d || !this.coop || !st || st.phase !== 'night' || d.t < 3.5) return;
+    let q = d.relay ? st.players[d.relay] : null;
+    if (!q || !q.alive) {
+      q = Object.values(st.players).find((o) => o.pid !== this.pid && o.alive) || null;
+      const was = d.relay;
+      d.relay = q?.pid || null;
+      document.getElementById('nosignal')?.classList.toggle('on', !q);
+      if (q && q.pid !== was) {
+        this.audio.play('click');
+        this.ui.caption(`Patched through to CH ${channelOf(q.pid)} · ${q.name}. The Strongbox waits for them.`, 5);
+      }
+      if (!q) return;
+    }
+    // follow their camera (eased: their position arrives in steps)
+    const p = this.player;
+    const k = 0.25;
+    p.x += (q.x - p.x) * k;
+    p.z += (q.z - p.z) * k;
+    let dy = (q.yaw || 0) - p.yaw;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    p.yaw += dy * k;
+    p.pitch += ((q.pitch || 0) - p.pitch) * k;
+    p.vx = p.vz = 0;
+    this.glitch = 0.08;
   }
 
   /** The helmet camera's person counter and face box: the Plus-One's tell (and the crew's). */
@@ -518,21 +631,37 @@ export class Game {
     tr.t++;
     if (tr.stage === 'out' && tr.t > 50) {
       tr.stage = 'loading';
-      const run = this.session.state.run;
-      const site = { worldSeed: run.seed, siteId: run.siteId, night: run.night };
-      this.onUiAction?.('travel', { site: SITES[site.siteId], night: run.night });
+      const st = this.session.state;
+      const run = st.run;
+      // a crew member drives to whatever the chief is working; the chief to the chosen writ
+      const site = this.coop?.client && st.phase === 'night' && st.site ? { ...st.site } : { worldSeed: run.seed, siteId: run.siteId, night: run.night };
+      this.onUiAction?.('travel', { site: SITES[site.siteId], night: site.night });
       await this.loadSite(site, (d, n) => this.ui.travelProgress?.(d, n));
+      if (this.coop?.client) {
+        tr.stage = 'wait'; // for the chief's door to open
+        tr.site = site;
+        return;
+      }
       const cells = [...this.world.cells.values()].map((c) => ({ cx: c.cx, cz: c.cz, kindId: c.kindId, lootSpots: c.lootSpots }));
       this.session.beginNight(site, spawnLoot(site, cells));
-      for (const e of this.session.drain()) this.onSessionEvent(e);
-      this.placeAtSpawn();
-      tr.stage = 'in';
-      tr.t = 0;
-      this.onUiAction?.('travelDone');
-      this.fadeTarget = 1;
-      const S = SITES[site.siteId];
-      this.ui.caption(`${S.writ} · ${S.name.toUpperCase()} · ${S.place.toUpperCase()}`, 5);
-    } else if (tr.stage === 'in' && tr.t > 60) this.travel = null;
+      const evs = this.session.drain();
+      this.coop?.queue(evs);
+      this.coop?.flush();
+      for (const e of evs) this.onSessionEvent(e);
+      this.arrive(site);
+    } else if (tr.stage === 'wait' && this.session.phase === 'night') this.arrive(tr.site);
+    else if (tr.stage === 'in' && tr.t > 60) this.travel = null;
+  }
+
+  arrive(site) {
+    const tr = this.travel;
+    this.placeAtSpawn();
+    tr.stage = 'in';
+    tr.t = 0;
+    this.onUiAction?.('travelDone');
+    this.fadeTarget = 1;
+    const S = SITES[site.siteId];
+    this.ui.caption(`${S.writ} · ${S.name.toUpperCase()} · ${S.place.toUpperCase()}`, 5);
   }
 
   beginDeparture(e) {
@@ -548,10 +677,19 @@ export class Game {
   }
 
   /** Called by the UI once the report has been read. */
-  async afterReport(onProgress) {
+  async afterReport(onProgress = () => {}) {
     this.departing = null;
     this.clearDeathCut();
+    if (this.coop?.client) {
+      // the crew chief signs the manifest for everyone
+      onProgress('waiting for the crew chief');
+      while (this.session.phase === 'report' && !this.coop?.closed) await new Promise((r) => setTimeout(r, 200));
+      if (this.session.phase === 'over') return 'over';
+      await this.loadBrief(onProgress);
+      return 'brief';
+    }
     this.session.toBrief();
+    this.coop?.flush();
     if (this.session.phase === 'over') return 'over';
     this.save.checkpoint(this.session.state.run);
     await this.loadBrief(onProgress);
@@ -642,11 +780,10 @@ export class Game {
 
   interact(near) {
     const { it, cell } = near;
-    const s = this.session;
     if (it.fn) return it.fn(this.moments.ctx(null, { x: near.x, y: near.y, z: near.z }));
-    if (it.type === 'item') return s.applyIntent(this.pid, { type: 'take', id: it.item.id });
-    if (it.type === 'chute') return s.applyIntent(this.pid, { type: 'deposit' });
-    if (it.type === 'governor') return s.applyIntent(this.pid, { type: 'lever' });
+    if (it.type === 'item') return this.intent({ type: 'take', id: it.item.id });
+    if (it.type === 'chute') return this.intent({ type: 'deposit' });
+    if (it.type === 'governor') return this.intent({ type: 'lever' });
     if (it.type === 'terminal') {
       this.audio.play('click');
       return this.onUiAction?.('terminal');
@@ -657,7 +794,6 @@ export class Game {
 
   /** Put the active item down in front of you (gently if crouched). */
   dropActive() {
-    const s = this.session;
     const me = this.localPlayer();
     const it = this.localHeld()[me.active];
     if (!it) return;
@@ -670,12 +806,13 @@ export class Game {
       x = p.x + fx * 0.15;
       z = p.z + fz * 0.15;
     }
-    s.applyIntent(this.pid, { type: 'drop', id: it.id, x: +x.toFixed(3), y: 0, z: +z.toFixed(3), yaw: +(p.yaw + 0.4).toFixed(3), gentle: p.crouch > 0.5 });
+    this.intent({ type: 'drop', id: it.id, x: +x.toFixed(3), y: 0, z: +z.toFixed(3), yaw: +(p.yaw + 0.4).toFixed(3), gentle: p.crouch > 0.5 });
   }
 
   // ---- frame ------------------------------------------------------------------------------------
 
-  frame(now) {
+  frame(now, { draw = true } = {}) {
+    if (draw) this._frameAt = performance.now();
     let dt = (now - this.last) / 1000;
     this.last = now;
     if (dt > 0.25) dt = 0.25;
@@ -684,8 +821,9 @@ export class Game {
       this.world.update(8);
       return;
     }
-    if (!this.paused) {
-      applyLook(this.player, this.input.takeLook());
+    // in co-op the night goes on behind a panel or the pause screen
+    if (!this.paused || this.coop) {
+      if (!this.paused) applyLook(this.player, this.input.takeLook());
       this.acc = (this.acc || 0) + dt;
       let n = 0;
       while (this.acc >= TICK && n < 8) {
@@ -706,7 +844,26 @@ export class Game {
     this.views.frame(dt);
     this.updateFaces();
     for (const sys of this.listeners) sys.frame?.(this, dt, alpha);
-    this.composer.render();
+    if (draw) this.composer.render();
+  }
+
+  /**
+   * A window in the background gets no animation frames, but a crew is relying on it: while
+   * crewed up, a worker's timer (not throttled like the page's) steps the game whenever the
+   * frames stop coming, without drawing.
+   */
+  watchVisibility() {
+    if (this._metronome) return;
+    const src = 'setInterval(() => postMessage(0), 25);';
+    this._metronome = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    this._metronome.onmessage = () => {
+      if (!this.coop) {
+        this._metronome.terminate();
+        this._metronome = null;
+        return;
+      }
+      if (performance.now() - (this._frameAt || 0) > 120) this.frame(performance.now(), { draw: false });
+    };
   }
 
   /** Interference on the helmet feed: some things in the building disturb the camera. */
@@ -967,6 +1124,15 @@ export class Game {
 }
 
 /** A tool's state for the HUD: a lamp's battery, an extinguisher's blasts. */
+function sameSite(a, b) {
+  return !!a && !!b && a.worldSeed === b.worldSeed && a.siteId === b.siteId && a.night === b.night;
+}
+
+/** The helmet channel a crew member's camera is on (p1 is CH 1). */
+export function channelOf(pid) {
+  return Number(String(pid).slice(1)) || 1;
+}
+
 function toolCharge(it) {
   if (it.type === 'lamp') return `${Math.round(it.charge * 100)}%`;
   if (it.type === 'extinguisher') return `${it.charge}/${ITEMS.extinguisher.charge}`;

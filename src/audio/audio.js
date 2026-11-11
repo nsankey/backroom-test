@@ -415,6 +415,12 @@ const SOUNDS = {
     noiseBurst(ae, out, t, { freq: 1800, q: 0.7, peak: 0.14, a: 0.01, d: 0.12 });
     noiseBurst(ae, out, t + 0.05, { type: 'lowpass', freq: 400, peak: 0.12, d: 0.08 });
   },
+  footfall(ae, out, t, opts = {}) {
+    // another receiver's boot: a heel strike and a scuff (crew in co-op)
+    const k = opts.soft ? 0.4 : 1;
+    noiseBurst(ae, out, t, { freq: ae.rng.float(1100, 1600), q: 0.9, peak: 0.12 * k, d: 0.06 });
+    noiseBurst(ae, out, t + 0.012, { type: 'lowpass', freq: 300, peak: 0.1 * k, d: 0.05 });
+  },
   setDown(ae, out, t) {
     noiseBurst(ae, out, t, { type: 'lowpass', freq: 900, peak: 0.22, d: 0.07 });
     tone(ae, out, t, 210, 'sine', 0.08, 0.002, 0.08);

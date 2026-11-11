@@ -1,0 +1,17 @@
+# The crew relay for Night Receivers co-op. Local only for now: `npx wrangler dev` (port 8787).
+# Not deployed; deploying is a separate, deliberate step.
+name = "night-receivers-relay"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lobby"]
+
+[dev]
+port = 8787
+ip = "127.0.0.1"

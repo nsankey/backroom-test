@@ -1,9 +1,10 @@
-import { Game } from './game/game.js';
+import { Game, crewId, channelOf } from './game/game.js';
 import { Save } from './game/save.js';
 import { newRun } from './game/run.js';
 import { UI } from './ui/ui.js';
 import { terminalPanel, mapPanel, reportPanel, overPanel, optionsPanel } from './ui/panels.js';
 import { fmtH } from './game/items.js';
+import { coopAvailable, roomCode, connect } from './game/coop.js';
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug');
@@ -23,12 +24,101 @@ async function boot() {
   window.__save = save;
   applySettings(save.data.settings);
   game.onUiAction = (name, arg) => onGameUi(name, arg);
+  game.onCoopEvent = (e) => onCoopEvent(e);
   $('#loading').textContent = 'warming the sensor...';
   await game.boot();
   $('#loading').textContent = '';
   refreshTitle();
-  if (params.has('autostart')) await (save.data.run ? continueContract() : newContract());
+  ui.show('#crew-menu', coopAvailable());
+  if (params.has('join')) await joinCrew(params.get('join'));
+  else if (params.has('host')) await hostCrew();
+  else if (params.has('autostart')) await (save.data.run ? continueContract() : newContract());
 }
+
+// ---- co-op --------------------------------------------------------------------------------------
+
+/** Take the contract in hand (or a new one) out with a crew: open a room on the relay. */
+async function hostCrew() {
+  game.audio.init();
+  const code = (params.get('room') || roomCode()).toUpperCase();
+  $('#loading').textContent = 'opening a line to the relay...';
+  let link;
+  try {
+    link = await connect(code, { host: true });
+  } catch (err) {
+    $('#loading').textContent = err.message === 'taken' ? `Room ${code} is in use. Try again.` : 'The relay did not answer. Is it running (server/: npx wrangler dev)?';
+    return;
+  }
+  $('#loading').textContent = '';
+  const seed = params.has('seed') ? Number(params.get('seed')) || 0 : null;
+  const run = save.data.run && seed === null ? JSON.parse(JSON.stringify(save.data.run)) : newRun(seed ?? save.newSeed());
+  if (!save.data.run || seed !== null) save.checkpoint(run);
+  await load(run);
+  game.hostCrew(link);
+  ui.caption(`Room ${code}. Give the crew this code; they join from the title screen.`, 8);
+}
+
+async function joinCrew(raw) {
+  game.audio.init();
+  const code = String(raw || '').trim().toUpperCase();
+  if (!/^[A-Z]{4}$/.test(code)) {
+    $('#loading').textContent = 'A room code is four letters.';
+    return;
+  }
+  $('#loading').textContent = `calling room ${code}...`;
+  let link;
+  try {
+    link = await connect(code, { name: crewId((Math.random() * 1e9) | 0) });
+  } catch (err) {
+    const why = { noRoom: `Nobody is working room ${code}.`, full: `Room ${code} has a full crew.` }[err.message];
+    $('#loading').textContent = why || 'The relay did not answer. Is it running (server/: npx wrangler dev)?';
+    return;
+  }
+  $('#loading').textContent = '';
+  ui.show('#title', false);
+  ui.show('#travel', true);
+  $('#travel-eyebrow').textContent = `ROOM ${code} · CH ${channelOf(link.pid)}`;
+  $('#travel-site').textContent = 'JOINING THE CREW';
+  $('#travel-blurb').textContent = 'Patching your helmet into the van...';
+  ui.travelProgress(0, 1);
+  try {
+    await game.joinCrew(link, (msg) => ($('#travel-blurb').textContent = msg + '...'));
+  } catch (err) {
+    game.leaveCrew();
+    game.session = null;
+    ui.show('#travel', false);
+    toTitle();
+    $('#loading').textContent = err.message;
+    return;
+  }
+  ui.show('#travel', false);
+  enter();
+  ui.caption(`On the line to room ${code} as CH ${channelOf(link.pid)}. The crew chief pulls the governor.`, 6);
+}
+
+function onCoopEvent(e) {
+  if (!game) return;
+  if (game.coop?.client && (e.type === 'hostLeft' || e.type === 'relayLost')) {
+    game.leaveCrew();
+    game.session = null;
+    game.clearDeathCut();
+    game.views.clear();
+    toTitle();
+    $('#loading').textContent = e.type === 'hostLeft' ? 'The crew chief has gone off the line. The night is over for you.' : 'The line to the relay dropped.';
+  } else if (game.coop?.host && e.type === 'relayLost') {
+    // the crew are gone: carry on alone
+    const s = game.session;
+    for (const pid of Object.keys(s.state.players)) if (pid !== game.pid) s.removePlayer(pid);
+    game.leaveCrew();
+    ui.caption('The relay has dropped. You are on your own.', 5);
+  }
+}
+
+$('#btn-host').addEventListener('click', () => hostCrew());
+$('#join-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  joinCrew($('#join-code').value);
+});
 
 function refreshTitle() {
   const r = save.data.run;
@@ -139,18 +229,19 @@ function openPanel(name, from, arg) {
   }
   const el = $('#panel');
   el.className = 'screen panel-' + name;
-  const intent = (i) => game.session.applyIntent(game.pid, i);
+  const intent = (i) => game.intent(i);
   if (name === 'map') mapPanel(el, game);
   else if (name === 'terminal') terminalPanel(el, game, { onIntent: intent });
   else if (name === 'options') optionsPanel(el, save, { onSettings: applySettings, onImported: () => location.reload() });
   else if (name === 'report')
     reportPanel(el, arg, game.session.state.run, {
       onContinue: async () => {
-        el.innerHTML = '<div class="term"><p>Driving back...</p></div>';
-        const r = await game.afterReport();
+        const say = (msg) => (el.innerHTML = `<div class="term"><p>${msg}...</p></div>`);
+        say('Driving back');
+        const r = await game.afterReport((msg) => say(msg === 'waiting for the crew chief' ? 'Waiting for the crew chief to sign the manifest' : 'Driving back'));
         if (r === 'over') {
           const run = game.session.state.run;
-          save.endContract(run);
+          if (!game.coop?.client) save.endContract(run); // the chief's contract, not ours
           openPanel('over', 'over', run);
         } else enter();
       },
@@ -230,6 +321,7 @@ $('#btn-resume').addEventListener('click', enter);
 $('#btn-pause-map').addEventListener('click', () => openPanel('map', 'pause'));
 $('#btn-pause-options').addEventListener('click', () => openPanel('options', 'pause'));
 $('#btn-quit').addEventListener('click', () => {
+  game.leaveCrew();
   game.session = null;
   toTitle();
 });
@@ -238,6 +330,11 @@ $('#btn-quit').addEventListener('click', () => {
 setInterval(() => {
   if (!game || !game.session) return;
   ui.update(game.hud());
+  const c = game.coop;
+  const room = c ? `ROOM ${c.code} · ${c.host ? `CHIEF · CREW ${Object.keys(game.session.state.players).length}` : `CH ${channelOf(game.pid)}`}` : '';
+  const el = $('#hud-room');
+  if (el.textContent !== room) el.textContent = room;
+  el.classList.toggle('hidden', !c);
   if (debug) {
     const c = game.currentCell;
     const p = game.player;

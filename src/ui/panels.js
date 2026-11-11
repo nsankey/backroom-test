@@ -222,6 +222,7 @@ export function reportPanel(el, report, run, { onContinue }) {
   let inst = '';
   if (report.clockedOut) inst = `<p><span class="stamp bad">CLOCKED OUT</span> &nbsp; A receiver working alone cannot be recovered. The contract ends tonight.</p>`;
   else if (report.paid) inst = `<p><span class="stamp good">INSTALMENT PAID</span> &nbsp; ${fmtH(report.target)} taken. The next Instalment is ${fmtH(report.nextTarget)}, due in three nights.</p>`;
+  else if (report.missed && report.target == null) inst = `<p><span class="stamp bad">IN DEBT</span> &nbsp; The fees have put the ledger below nothing. Grisholm &amp; Daughters do not carry debtors' debts.</p>`;
   else if (report.missed) inst = `<p><span class="stamp bad">INSTALMENT MISSED</span> &nbsp; ${fmtH(report.target)} was due.</p>`;
   else inst = `<p class="muted">Instalment ${fmtH(run.instalment.target)} due at the end of night ${run.instalment.due}. Still owed: ${fmtH(Math.max(0, run.instalment.target - run.ledger))}.</p>`;
   const behind = report.leftBehind.length ? `<p class="bad">You were not aboard at 04:00. A recovery crew collected you at first light. Everything you carried is gone, and you are stood down for night ${report.skipped}.</p>` : '';

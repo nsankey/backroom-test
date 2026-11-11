@@ -13,7 +13,7 @@ look and sound in docs/STYLE.md. The earlier game's progress log is in git histo
 | 1. Loop without threats | done: van brief, writs, night clock, loot, carrying, night safe, departure, Instalment, fail screen |
 | 2. Threats | done: four creatures with tells and counterplay, death and drop, signal-lost cut, notices |
 | 3. Tools | done: five tools from the van's stores, a rack in the van, kept or written off at departure |
-| 4. Co-op (local) | not started |
+| 4. Co-op (local) | done: crew relay (Worker + Durable Object per room code) under `wrangler dev`, host-authoritative, up to four. Not deployed. No proximity voice |
 
 ## How to run
 
@@ -25,6 +25,22 @@ npx vite --port 5187
 Open http://localhost:5187. URL flags: `?debug` (fps and cell readout), `?fresh` (wipe the
 save), `?seed=N` (seed for a new contract), `?autostart` (skip the title), `?shift=120` (a
 shift of 120 real seconds instead of 540).
+
+### Co-op on one machine
+
+```
+cd server
+npm install
+npx wrangler dev          # the crew relay on ws://127.0.0.1:8787
+```
+
+With the relay and Vite both running (`.env.development` points `VITE_MP_URL` at the relay),
+open two windows on http://localhost:5187. In one, **Take a crew out** (the crew chief: it runs
+the rules and saves the contract). It shows a four-letter room code in the HUD. In the other,
+type the code and **Join a crew**. Shortcuts: `?host&room=ABCD` and `?join=ABCD`. Up to four
+crew. The chief pulls the governor and signs the manifest for everyone. Production builds have
+no relay URL, so the published site shows no co-op menu. To put the relay on Cloudflare later:
+`npx wrangler deploy` in `server/`, then build with `VITE_MP_URL=wss://<worker host>`.
 
 Console hooks (`__game`): `debugView(x, z, yaw, pitch)` renders one frame from a spot and
 freezes it in an overlay; `await debugSave('name')` writes that frame to `shots/name.jpg`;
@@ -67,7 +83,9 @@ Dimmer wakes at 01:30 / 01:00 / 00:30. The Plus-One is not scheduled: it comes a
 / 95 seconds alone (not within 6 m of crew, not in the van), after 22:00.
 
 Death: everything carried drops where you fall. In co-op the night goes on for the others and
-the firm bills a recovery fee per lost receiver. Solo, the night ends and the contract with it
+the firm bills a recovery fee per lost receiver; after the NO SIGNAL card the van's monitor
+patches you through to a living crew member's helmet feed until the Strongbox leaves. If the
+fees put the ledger below zero, the contract ends (IN DEBT). Solo, the night ends and the contract with it
 (NOTICE OF SIGNAL LOSS with the run summary).
 
 ## Tools
@@ -115,6 +133,13 @@ tools left in the building are written off on the manifest.
   is passed in only to answer questions (paths, line of sight, light). Players' footsteps and
   set-downs reach them as `noise` intents. Their looks and sounds live in `creatures/views.js`
   and ease toward the state, so 15 Hz co-op snapshots will look smooth.
+- **Co-op is the same Session on one machine, mirrored** (`src/game/coop.js`, `server/`). The
+  relay holds no game state: per room code, a Durable Object passes crew messages to the chief
+  and the chief's to the crew. Crew send movement (30 Hz) and intents; the chief applies them
+  before each tick and sends the whole state, minus creature paths, with the events since the
+  last one, 15 Hz (about 7 KB, 0.03 ms to build); phase changes and deaths go at once. Crew
+  never tick the rules; they load the same sites from the same seeds. In co-op the rules keep
+  running behind panels, and a worker timer steps a chief's window that gets no frames.
 - **Saves**: the run is checkpointed in the van before each night (`nightreceivers.save.v1`).
   A night abandoned halfway is a night not worked. Codes are `NR1-` deflated JSON.
 
@@ -167,3 +192,29 @@ tools left in the building are written off on the manifest.
 - Look pass 2: the extinguisher's cloud read as cotton balls (60 faint puffs that jet, spread
   and settle); the beam had a hard disc edge (wide penumbra); the lamp's lens was dull while on
   (it glows).
+
+## Step 4 log
+
+- Relay: `server/src/index.js`, a Worker routing `/room/CODE` to a `Lobby` Durable Object
+  (SQLite-class migration, ready for the free plan). First socket is the chief (p1); crew get
+  p2 to p4. It tells the chief who joined and left, and the crew when the chief has gone.
+- Checked with two windows (chief in a background tab, crew in front): join in the brief, buy a
+  lamp (chief) and take it off the rack (crew), drive out together, the crew's lamp lights,
+  take and bank from the crew side, the chief carries one aboard and pulls the governor twice,
+  both read the manifest, the crew waits for the chief to sign, both stand in night 2's brief.
+  A crew death cuts to NO SIGNAL and then the chief's feed; a full wipe ends the night on both
+  screens. The chief's window kept 60 ticks a second with no animation frames.
+- Solo check after the change: three nights banking the best 22 items each, Instalment of
+  ħ400 paid at the end of night 3, ħ650 due by night 6.
+- Session: `solo` is now "one receiver on the contract" (a crew member who drops off the line
+  leaves what they carried where they stood). Intents go through `game.intent()`.
+- Look pass 1 (the crew figure, three angles): a blank egg for a face (brow, shadowed eyes,
+  nose, stubbled jaw); arms hung straight while the salvage floated in front (arms out under
+  the load); the head never moved (it follows their camera's pitch).
+- Look pass 2: the hard hat glowed white in a dark bay (scuffed, grimy shell); the face was
+  busy (no mouth line, smaller eyes); they stood like pins (feet apart at rest, a slight
+  shifting of weight).
+- Found on the way: the manifest printed "ħNaN was due" when fees put the ledger in debt (now
+  IN DEBT).
+- The crew hear each other's footfalls (a heel strike placed at the figure, softer crouched).
+- Not done: proximity voice.

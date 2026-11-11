@@ -4,7 +4,7 @@
 // Also draws the other crew in co-op (the same figure the Plus-One borrows).
 
 import * as THREE from 'three';
-import { bakeShade, lightMats } from '../game/items.js';
+import { bakeShade, lightMats, slotsOf } from '../game/items.js';
 import { DIMMER_R } from './dimmer.js';
 
 const _l = [0, 0, 0];
@@ -209,7 +209,7 @@ export function crewModel({ visor = false, color = 0x4f5a4a } = {}) {
   const suit = k.mat(color);
   const band = k.mat(0xc9c37a);
   const boot = k.mat(0x1e1c1a);
-  const hat = k.mat(0xb3ab90);
+  const hat = k.mat(0x8f8873); // scuffed, years of grime in the shell
   const face = k.mat(0x8c705c);
   const body = k.pivot(k.g, 0, 0, 0);
   const legL = limb(k, body, -0.11, 0.86, 0, 0.08, 0.068, 0.86, suit);
@@ -229,6 +229,15 @@ export function crewModel({ visor = false, color = 0x4f5a4a } = {}) {
   skull.scale.set(1, 1.15, 1.05);
   k.add(head, new THREE.SphereGeometry(0.15, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), hat, 0, 0.05, 0);
   k.add(head, cyl(0.19, 0.19, 0.018, 18), hat, 0, 0.05, -0.02);
+  if (!visor) {
+    // a face, plainly: brow, shadowed eyes, nose, mouth, a day's stubble
+    const dark = k.mat(0x3a2c24);
+    k.add(head, box(0.1, 0.016, 0.02), k.mat(0x6e5646), 0, 0.035, -0.112); // brow
+    for (const sx of [-0.036, 0.036]) k.add(head, box(0.026, 0.012, 0.01), dark, sx, 0.018, -0.115);
+    k.add(head, box(0.022, 0.04, 0.03), face, 0, -0.008, -0.122); // nose
+    const jaw = k.add(head, new THREE.SphereGeometry(0.1, 12, 6, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), k.mat(0x6a5444), 0, -0.012, -0.004);
+    jaw.scale.set(1.08, 1.2, 1.12);
+  }
   k.add(head, box(0.06, 0.07, 0.11), k.mat(0x2a2c2c), 0.165, 0.06, -0.02); // helmet camera
   const lamp = k.add(head, box(0.015, 0.015, 0.01), k.flat(visor ? 0x140504 : 0xff2a14), 0.165, 0.08, -0.08);
   lamp.userData.noShade = true;
@@ -317,11 +326,15 @@ function chalkFloor(seed) {
   return m;
 }
 
+// the crew's overalls: issued from whatever the stores had, so no two quite match
+const OVERALLS = { p1: 0x4f5a4a, p2: 0x55504a, p3: 0x485260, p4: 0x5a4c44 };
+
 const BUILD = {
   hushwarden: () => hushwardenModel(),
   dimmer: () => dimmerModel(),
   stocktaker: () => stocktakerModel(),
   plusOne: () => crewModel({ visor: true }),
+  crew: (s) => crewModel({ color: OVERALLS[s.pid] || 0x4f5a4a }),
 };
 
 const LOOP = {
@@ -351,7 +364,17 @@ export class CreatureViews {
   frame(dt) {
     const g = this.game;
     const st = g.session?.state;
-    const list = st?.phase === 'night' ? st.creatures : [];
+    const list = st?.phase === 'night' ? [...st.creatures] : [];
+    // the rest of the crew, in the van and out on the floor (not the one whose feed you watch)
+    if (st && st.phase !== 'report' && st.phase !== 'over' && !g.travel) {
+      const relay = g.deathCut?.relay;
+      for (const q of Object.values(st.players)) {
+        if (q.pid === g.pid || q.pid === relay || !q.alive) continue;
+        const held = slotsOf(st.items, q.pid)[q.active];
+        const carry = !!held && !String(held).startsWith('tool:harness');
+        list.push({ id: `crew-${q.pid}`, type: 'crew', pid: q.pid, x: q.x, z: q.z, yaw: q.yaw, pitch: q.pitch || 0, moving: q.speed || 0, crouch: q.crouch, carry });
+      }
+    }
     const seen = new Set();
     let patch = null;
     for (const s of list) {
@@ -372,7 +395,7 @@ export class CreatureViews {
 
   create(s) {
     const g = this.game;
-    const model = BUILD[s.type]();
+    const model = BUILD[s.type](s);
     model.g.position.set(s.x, 0, s.z);
     model.g.rotation.y = s.yaw || 0;
     g.scene.add(model.g);
@@ -471,6 +494,33 @@ export class CreatureViews {
         P.body.position.y = Math.abs(Math.cos(v.phase)) * 0.03 * Math.min(1, moving);
         // its head cocked a little to one side, as if listening for something you said
         if (s.type === 'plusOne') P.head.rotation.z = 0.18 + Math.sin(t * 0.3) * 0.03;
+        if (s.type === 'crew') {
+          const e = Math.min(1, dt * 8);
+          // the crew crouch to set things down gently
+          v.crouchK = (v.crouchK || 0) + ((s.crouch ? 1 : 0) - (v.crouchK || 0)) * e;
+          P.body.position.y -= v.crouchK * 0.42;
+          P.legL.rotation.x -= v.crouchK * 0.9;
+          P.legR.rotation.x -= v.crouchK * 0.9;
+          // arms out under whatever they carry; the head looks where their camera looks
+          v.carryK = (v.carryK || 0) + ((s.carry ? 1 : 0) - (v.carryK || 0)) * e;
+          P.armL.rotation.x = P.armL.rotation.x * (1 - v.carryK) + 0.8 * v.carryK;
+          P.armR.rotation.x = P.armR.rotation.x * (1 - v.carryK) + 0.8 * v.carryK;
+          P.armL.rotation.z = -0.12 * v.carryK;
+          P.armR.rotation.z = 0.12 * v.carryK;
+          P.head.rotation.x += (Math.max(-0.5, Math.min(0.5, -s.pitch * 0.8)) - P.head.rotation.x) * e;
+          P.body.rotation.z = Math.sin(t * 0.5 + (s.pid === 'p2' ? 2 : 0)) * 0.012; // weight shifting
+          // feet apart when standing, closing up as they walk
+          const stance = 0.06 * (1 - Math.min(1, s.moving / 1.2));
+          P.legL.rotation.z = -stance;
+          P.legR.rotation.z = stance;
+          // their footfalls, a step every half stride
+          const step = Math.floor(v.phase / Math.PI);
+          if (s.moving > 0.4 && step !== v.lastStep) {
+            const o = v.model.g.position;
+            this.game.audio.play('footfall', { x: o.x, y: 0.1, z: o.z }, { soft: s.crouch, wet: 0.4 });
+          }
+          v.lastStep = step;
+        }
       }
     }
   }

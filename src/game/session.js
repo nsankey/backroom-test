@@ -32,8 +32,7 @@ const RACK = [
 export { inVan };
 
 export class Session {
-  constructor(run, { solo = true } = {}) {
-    this.solo = solo;
+  constructor(run) {
     this.state = {
       tick: 0,
       phase: 'brief', // brief -> travel -> night -> report -> brief ... | over
@@ -64,6 +63,10 @@ export class Session {
   get phase() {
     return this.state.phase;
   }
+  /** Working alone: a death ends the contract, being left behind costs a night. */
+  get solo() {
+    return Object.keys(this.state.players).length <= 1;
+  }
   get minutes() {
     return shiftMinutes(this.state.shiftTick);
   }
@@ -84,7 +87,28 @@ export class Session {
   addPlayer(pid, name) {
     const v = VAN.inner;
     this.state.players[pid] = { pid, name, x: (v.x0 + v.x1) / 2, z: v.z0 + 1.6, yaw: 0, active: 0, alive: true, crouch: false, speed: 0, still: 0, alone: 0, lamp: false };
+    this.emit({ type: 'crewIn', pid, name });
     return this.state.players[pid];
+  }
+
+  /** A crew member's line dropped: what they carried falls where they stood. */
+  removePlayer(pid) {
+    const st = this.state;
+    const p = st.players[pid];
+    if (!p) return;
+    let k = 0;
+    for (const it of st.items) {
+      if (it.holder !== pid) continue;
+      const a = k++ * 2.1;
+      it.holder = null;
+      it.n = 0;
+      it.x = +(p.x + Math.cos(a) * 0.35).toFixed(3);
+      it.z = +(p.z + Math.sin(a) * 0.35).toFixed(3);
+      it.y = 0;
+    }
+    delete st.players[pid];
+    this.emit({ type: 'crewOut', pid, name: p.name });
+    if (st.phase === 'night' && !Object.values(st.players).some((q) => q.alive) && st.wipeAt < 0) st.wipeAt = st.tick + 4 * TICK_HZ;
   }
 
   /** Movement is owned by each player's client; the session keeps a copy for rules. */

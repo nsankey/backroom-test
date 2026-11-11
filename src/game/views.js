@@ -2,7 +2,7 @@
 // player's hands, and the van's time-locked rear door. Reads state; never changes it.
 
 import * as THREE from 'three';
-import { buildModel, ITEMS } from './items.js';
+import { buildModel, ITEMS, slotsOf } from './items.js';
 import { VAN } from '../world/kinds/yard.js';
 import { CreatureViews } from '../creatures/views.js';
 
@@ -69,13 +69,22 @@ export class Views {
 
     this.creatures.frame(dt);
 
-    // items on the floor (and in a creature's hands)
+    // items on the floor (and in a creature's hands, and in the rest of the crew's)
     const seen = new Set();
     for (const it of s.items) {
-      if (it.holder && !String(it.holder).startsWith('c')) continue;
+      let at = it;
+      if (it.holder && !String(it.holder).startsWith('c')) {
+        // another crew member's active item, carried in front of them (the frame is on their back)
+        const q = s.players[it.holder];
+        const cv = it.holder !== g.pid && this.creatures.views.get(`crew-${it.holder}`);
+        if (!q || !cv || it.type === 'harness' || slotsOf(s.items, q.pid)[q.active] !== it.id) continue;
+        const o = cv.model.g;
+        const big = ITEMS[it.type].slots > 1;
+        at = { x: +(o.position.x - Math.sin(o.rotation.y) * 0.38).toFixed(2), y: big ? 0.72 : 0.9, z: +(o.position.z - Math.cos(o.rotation.y) * 0.38).toFixed(2), yaw: +o.rotation.y.toFixed(2) };
+      }
       seen.add(it.id);
       let v = this.items.get(it.id);
-      const key = `${it.x},${it.y},${it.z},${it.yaw}`;
+      const key = `${at.x},${at.y},${at.z},${at.yaw}`;
       if (!v) {
         v = { model: buildModel(it.type), key: '' };
         g.scene.add(v.model.object);
@@ -87,13 +96,13 @@ export class Views {
         v.key = ''; // relight it with its new tag
       }
       if (v.key !== key || ((this.creatures.dark.w > 0 || lampNear || v.lampLit) && g.tick % 3 === 0)) {
-        v.model.object.position.set(it.x, it.y, it.z);
-        v.model.object.rotation.set(0, it.yaw, 0);
-        g.world.lightAt(it.x, it.y + 0.3, it.z, _light);
-        const dk = this.creatures.darkK(it.x, it.z);
+        v.model.object.position.set(at.x, at.y, at.z);
+        v.model.object.rotation.set(0, at.yaw, 0);
+        g.world.lightAt(at.x, at.y + 0.3, at.z, _light);
+        const dk = this.creatures.darkK(at.x, at.z);
         for (let k = 0; k < 3; k++) _light[k] *= dk;
         const before = _light[0] + _light[1];
-        g.tools.addLamp(it.x, it.y + 0.15, it.z, _light);
+        g.tools.addLamp(at.x, at.y + 0.15, at.z, _light);
         v.lampLit = _light[0] + _light[1] > before + 0.001;
         v.model.setLight(_light, 1.1);
         if (v.tag) {

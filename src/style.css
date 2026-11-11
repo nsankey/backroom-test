@@ -329,6 +329,44 @@ button:disabled {
   opacity: 0.35;
   cursor: default;
 }
+.crew-menu {
+  margin-top: 22px;
+}
+.crew-label {
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+.join-form {
+  display: flex;
+  gap: 6px;
+  width: 286px;
+}
+.join-form input {
+  width: 72px;
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ink);
+  background: rgba(233, 236, 230, 0.04);
+  border: 1px solid rgba(233, 236, 230, 0.35);
+}
+.join-form input:focus {
+  border-color: var(--amber);
+  outline: none;
+}
+.join-form button {
+  min-width: 0;
+  flex: 1;
+}
+#hud-room {
+  margin-top: 4px;
+  color: var(--amber);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
 .loading,
 .records,
 .note {
